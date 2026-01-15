@@ -1,4 +1,6 @@
 # Oonanji Vault - On-Premise LLM System (v1.0.0)
+<img width="1920" height="1080" alt="local-AIAgent-Oonanji Vault" src="https://github.com/user-attachments/assets/45e8929a-64e8-4e5b-a212-d7b729be0d66" />
+
 
 A secure, localhost-based on-premise LLM chat system with NAS search capabilities (RAG).
 Designed for organizations to safely utilize internal data with zero external data transmission.
