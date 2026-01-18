@@ -463,6 +463,21 @@ def init_db():
     )
     ''')
     
+    # Create default users if they don't exist
+    cursor.execute('SELECT * FROM users WHERE username = ?', ('adminuser',))
+    if not cursor.fetchone():
+        hashed = pwd_context.hash('admin')
+        cursor.execute('INSERT INTO users (username, display_name, password_hash, role) VALUES (?, ?, ?, ?)', 
+                      ('adminuser', 'Administrator', hashed, 'admin'))
+        logger.info("Created default admin user: adminuser / admin")
+        
+    cursor.execute('SELECT * FROM users WHERE username = ?', ('user',))
+    if not cursor.fetchone():
+        hashed = pwd_context.hash('admin')
+        cursor.execute('INSERT INTO users (username, display_name, password_hash, role) VALUES (?, ?, ?, ?)', 
+                      ('user', 'General User', hashed, 'user'))
+        logger.info("Created default general user: user / admin")
+    
     conn.commit()
     conn.close()
 
