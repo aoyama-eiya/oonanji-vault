@@ -1,5 +1,7 @@
-# Use NVIDIA CUDA base image for GPU support
-FROM nvidia/cuda:12.2.2-devel-ubuntu22.04
+# Use standard Ubuntu base image (works on both CPU and GPU)
+# For GPU support, uncomment the NVIDIA CUDA image below and comment out the Ubuntu line
+FROM ubuntu:22.04
+# FROM nvidia/cuda:12.2.2-devel-ubuntu22.04
 
 WORKDIR /app
 
@@ -21,17 +23,20 @@ RUN ln -s /usr/bin/python3 /usr/bin/python
 
 # Python Environment Variables
 ENV PYTHONUNBUFFERED=1
-ENV CMAKE_ARGS="-DGGML_CUDA=on"
-ENV FORCE_CMAKE=1
+# Uncomment below for GPU support (requires NVIDIA CUDA base image)
+# ENV CMAKE_ARGS="-DGGML_CUDA=on"
+# ENV FORCE_CMAKE=1
 
 # Install Python dependencies
-# Install llama-cpp-python separately for caching
-# Use pre-built wheel for CUDA 12.2 to avoid long compilation times
 RUN pip3 install --upgrade pip
-RUN pip3 install llama-cpp-python \
-    --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu122 \
-    --no-cache-dir \
-    || CMAKE_ARGS="-DGGML_CUDA=on" pip3 install llama-cpp-python --no-cache-dir --verbose
+
+# Install llama-cpp-python (CPU version by default)
+# For GPU support, uncomment the CUDA-specific installation below
+RUN pip3 install llama-cpp-python --no-cache-dir
+# RUN pip3 install llama-cpp-python \
+#     --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu122 \
+#     --no-cache-dir \
+#     || CMAKE_ARGS="-DGGML_CUDA=on" pip3 install llama-cpp-python --no-cache-dir --verbose
 
 # Install other dependencies
 COPY requirements.txt .

@@ -10,7 +10,6 @@ services:
       - .:/app
       - ./models:/app/models
       - ./chroma_db:/app/chroma_db
-      - ./users.db:/app/users.db
       - ./mnt:/app/mnt
       - ./internal_storage:/app/internal_storage
       - ./logs:/app/logs
@@ -20,13 +19,14 @@ services:
       - LANG=C.UTF-8
       - TZ=Asia/Tokyo
       - CLUSTER_NODES=${CLUSTER_NODES:-} # Example: http://192.168.1.11:8000
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [ gpu ]
+    # Uncomment below to enable GPU support (requires NVIDIA GPU + nvidia-docker)
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [ gpu ]
     command: uvicorn backend:app --host 0.0.0.0 --port 8000 --reload
     restart: unless-stopped
 
