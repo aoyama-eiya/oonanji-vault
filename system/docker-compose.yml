@@ -18,8 +18,10 @@ services:
       - LC_ALL=C.UTF-8
       - LANG=C.UTF-8
       - TZ=Asia/Tokyo
-      - CLUSTER_NODES=${CLUSTER_NODES:-} # Example: http://192.168.1.11:8000
-    # Uncomment below to enable GPU support (requires NVIDIA GPU + nvidia-docker)
+      - CLUSTER_NODES=${CLUSTER_NODES:-}
+    # For NVIDIA GPU support:
+    # 1. Use 'nvidia/cuda:12.2.2-devel-ubuntu22.04' as base in system/Dockerfile.backend
+    # 2. Uncomment the 'deploy' section below
     # deploy:
     #   resources:
     #     reservations:

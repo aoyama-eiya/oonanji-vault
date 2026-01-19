@@ -75,6 +75,11 @@ INTERNAL_NAS_DIR = BASE_DIR / "internal_storage"
 CHROMA_DB_DIR = BASE_DIR / "chroma_db"
 DB_PATH = BASE_DIR / "users.db"
 
+# Safety check: if users.db is a directory (sometimes happens with Docker volume mounts), remove it
+if DB_PATH.exists() and DB_PATH.is_dir():
+    logger.warning("DB_PATH is a directory, removing it to allow file creation...")
+    shutil.rmtree(DB_PATH)
+
 # Ensure directories exist
 MODELS_DIR.mkdir(exist_ok=True)
 # MNT_DIR is for external NAS mounts, do not auto-create to respect user's filesystem
@@ -91,6 +96,7 @@ else:
 
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 30  # 30 days
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # Global State
 class GlobalState:
@@ -482,7 +488,6 @@ def init_db():
     conn.close()
 
 # --- Auth Utilities ---
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 def verify_password(plain_password, hashed_password):
@@ -971,29 +976,9 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Failed to reset indexing state: {e}")
     
-    # Create default admin if needed
+    # Load settings
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     cursor = conn.cursor()
-    
-    # Admin User
-    cursor.execute('SELECT * FROM users WHERE username = ?', ('adminuser',))
-    if not cursor.fetchone():
-        hashed = get_password_hash('admin')
-        cursor.execute('INSERT INTO users (username, display_name, password_hash, role) VALUES (?, ?, ?, ?)', 
-                      ('adminuser', 'Administrator', hashed, 'admin'))
-        conn.commit()
-        logger.info("Created default admin user: adminuser / admin")
-        
-    # General User
-    cursor.execute('SELECT * FROM users WHERE username = ?', ('user',))
-    if not cursor.fetchone():
-        hashed = get_password_hash('admin')
-        cursor.execute('INSERT INTO users (username, display_name, password_hash, role) VALUES (?, ?, ?, ?)', 
-                      ('user', 'General User', hashed, 'user'))
-        conn.commit()
-        logger.info("Created default general user: user / admin")
-    
-    # Load settings
     cursor.execute('SELECT value FROM settings WHERE key = ?', ('storage_mode',))
     row = cursor.fetchone()
     if row:
