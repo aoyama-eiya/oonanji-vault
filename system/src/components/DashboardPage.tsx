@@ -49,7 +49,9 @@ import { AIModel, ChatMessage } from '@/types';
 
 
 
-type ModelMode = 'Fast' | 'Thinking';
+
+
+type ModelMode = 'Fast' | 'Agent';
 
 type ChatSession = {
     id: string;
@@ -97,6 +99,7 @@ export default function DashboardPage() {
 
     const [historyOpen, setHistoryOpen] = useState(true);
     const [modelSelectorOpen, setModelSelectorOpen] = useState(false);
+    const [modelMenuPos, setModelMenuPos] = useState<{ top: number, right: number } | null>(null);
     const [dbSearchEnabled, setDbSearchEnabled] = useState(false);
     const [selectedMode, setSelectedMode] = useState<ModelMode>('Fast');
 
@@ -118,6 +121,7 @@ export default function DashboardPage() {
     const [abortController, setAbortController] = useState<AbortController | null>(null);
     const [isStreaming, setIsStreaming] = useState(false);
     const [streamingStatus, setStreamingStatus] = useState<string | null>(null);
+    const [isComposing, setIsComposing] = useState(false); // For IME input handling
     const [currentAiMessageId, setCurrentAiMessageId] = useState<string | null>(null);
     const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
     const [isUploading, setIsUploading] = useState(false);
@@ -156,7 +160,7 @@ export default function DashboardPage() {
     const [canvasOpen, setCanvasOpen] = useState(false);
     const [canvasContent, setCanvasContent] = useState('');
     const [canvasLanguage, setCanvasLanguage] = useState('');
-    const [canvasModeEnabled, setCanvasModeEnabled] = useState(false); // Toggle via ClipMenu
+
     const [canvases, setCanvases] = useState<Canvas[]>([]);
     const [currentCanvas, setCurrentCanvas] = useState<Canvas | null>(null);
     const [licenseModalOpen, setLicenseModalOpen] = useState(false);
@@ -166,6 +170,8 @@ export default function DashboardPage() {
         setCanvasLanguage(language);
         setCurrentCanvas(canvas || null);
         setCanvasOpen(true);
+        // Close sidebar when Canvas opens for more workspace
+        setSidebarOpen(false);
     }, []);
 
     const persistCanvasState = async (content?: string, language?: string, sessionId?: string) => {
@@ -593,8 +599,8 @@ export default function DashboardPage() {
     };
 
     const models: { [key in ModelMode]: AIModel } = {
-        'Thinking': { id: '1', name: 'Qwen2.5 Coder 7B', filename: 'qwen2.5-coder-7b-instruct-q4_k_m.gguf', size: 4294967296, type: 'GGUF', isActive: false },
-        'Fast': { id: '2', name: 'Qwen2 1.5B', filename: 'qwen2-1.5b-instruct-q8_0.gguf', size: 1610612736, type: 'GGUF', isActive: true },
+        'Fast': { id: '2', name: 'Qwen2.5 3B', filename: 'qwen2.5-3b-instruct-q4_0.gguf', size: 2000000000, type: 'GGUF', isActive: true },
+        'Agent': { id: 'agent', name: 'Oonanji Agent', filename: 'agent-core', size: 0, type: 'Agent', isActive: true },
     };
 
     const selectedModel = models[selectedMode];
@@ -852,7 +858,7 @@ export default function DashboardPage() {
                     use_nas: dbSearchEnabled,
                     session_id: currentSessionId,
                     attached_file_ids: fileIds,
-                    canvas_mode: canvasModeEnabled || input.toLowerCase().includes('canvas') || input.includes('キャンバス') // Auto-enable if keyword found
+                    canvas_mode: input.toLowerCase().includes('canvas') || input.includes('キャンバス') // Auto-enable if keyword found
                 }),
                 signal: controller.signal
             });
@@ -884,8 +890,13 @@ export default function DashboardPage() {
                     if (line.startsWith('data: ')) {
                         try {
                             const data = JSON.parse(line.slice(6));
+                            if (data.status) {
+                                setStreamingStatus(data.status);
+                            }
+
                             if (data.content !== undefined) {
                                 fullResponse += data.content;
+
 
                                 // CANVAS PARSING LOGIC
                                 // 1. Open immediately if start tag found
@@ -951,6 +962,19 @@ export default function DashboardPage() {
                                 newTitle = data.title;
                             }
                             if (data.done) {
+                                // Strip agent logs from final display (keeping only final answer)
+                                // Logs are lines starting with "> 🧠", "> 🛠️", "> 🔍", "> ❌"
+                                const logPattern = /^>\s*(?:🧠|🛠️|🔍|❌).*$/gm;
+                                const cleanedResponse = fullResponse.replace(logPattern, '').replace(/\n{3,}/g, '\n\n').trim();
+                                fullResponse = cleanedResponse;
+
+                                // Update message with cleaned response
+                                setMessages((prev) => {
+                                    return prev.map((msg) =>
+                                        msg.id === aiMessageId ? { ...msg, content: cleanedResponse } : msg
+                                    );
+                                });
+
                                 // Update session list
                                 if (newSessionId && !currentSessionId) {
                                     setCurrentSessionId(newSessionId);
@@ -972,6 +996,15 @@ export default function DashboardPage() {
                                         msg.id === aiMessageId ? { ...msg, content: `エラー: ${data.error}` } : msg
                                     )
                                 );
+                            }
+                            // Handle Canvas content from agent
+                            if (data.canvas_content) {
+                                setCanvasContent(data.canvas_content);
+                                setCanvasLanguage(data.canvas_language || 'html');
+                                setCanvasOpen(true);
+                                setSidebarOpen(false); // Close sidebar for canvas workspace
+                                finalCanvasContent = data.canvas_content;
+                                finalCanvasLanguage = data.canvas_language || 'html';
                             }
                         } catch (e) {
                             console.error('Failed to parse SSE data:', e);
@@ -1013,7 +1046,18 @@ export default function DashboardPage() {
     return (
         <div className="h-screen bg-[var(--background)] p-0 md:p-4 flex overflow-hidden relative">
             {/* Sidebar */}
-            <div className={`floating-panel h-full flex flex-col justify-between transition-all duration-300 md:mr-4 md:rounded-2xl rounded-none border-0 md:border ${sidebarOpen ? 'md:w-64 w-full fixed inset-0 z-50 md:relative md:inset-auto' : 'md:w-16 hidden md:flex'}`}>
+            <div
+                onClick={(e) => {
+                    // Toggle if the click didn't originate from an interactive element
+                    if (!(e.target as HTMLElement).closest('button')) {
+                        setSidebarOpen(!sidebarOpen);
+                    }
+                }}
+                className={`floating-panel h-full flex flex-col justify-between transition-all duration-300 md:mr-4 border-0 md:border cursor-ew-resize ${sidebarOpen
+                    ? 'md:w-64 w-full fixed inset-0 z-50 md:relative md:inset-auto md:rounded-2xl rounded-none'
+                    : 'md:w-16 hidden md:flex md:rounded-[2rem]' // Reduced width
+                    }`}
+            >
                 {/* Top Section */}
                 <div className="flex-1 flex flex-col min-h-0">
                     <div className={`p-3 ${!sidebarOpen && 'flex justify-center'}`}>
@@ -1025,23 +1069,23 @@ export default function DashboardPage() {
                         </button>
                     </div>
 
-                    <div className="flex-1 flex flex-col items-stretch p-3 min-h-0">
+                    <div className={`flex-1 flex flex-col p-3 min-h-0 ${!sidebarOpen ? 'items-center' : 'items-stretch'}`}>
                         {/* Action Buttons - Moved 'justify-center' logic to button level for collapsing */}
                         <div className={`flex flex-col gap-1 ${!sidebarOpen && 'items-center'}`}>
                             <button
                                 onClick={startNewChat}
-                                className={`flex items-center gap-3 px-3 py-2.5 rounded-full hover:bg-[var(--muted)] hover:shadow-sm transition-all duration-200 text-left text-xs ${!sidebarOpen && 'justify-center w-10 h-10 px-0'}`}
+                                className={`flex items-center py-2.5 rounded-full hover:bg-[var(--muted)] hover:shadow-sm transition-all duration-200 text-left text-xs ${sidebarOpen ? 'gap-3 px-3' : 'justify-center w-full px-0'}`}
                             >
                                 <Plus className="w-4 h-4 flex-shrink-0" />
-                                {sidebarOpen && <span>{t('sidebar_chat')}</span>}
+                                <span className={`whitespace-nowrap overflow-hidden transition-all duration-200 ${sidebarOpen ? 'w-auto opacity-100' : 'w-0 opacity-0'}`}>{t('sidebar_chat')}</span>
                             </button>
 
                             <button
                                 onClick={() => { setDriveModalOpen(true); fetchDriveFiles(); }}
-                                className={`flex items-center gap-3 px-3 py-2.5 rounded-full hover:bg-[var(--muted)] hover:shadow-sm transition-all duration-200 text-left text-xs ${!sidebarOpen && 'justify-center w-10 h-10 px-0'}`}
+                                className={`flex items-center py-2.5 rounded-full hover:bg-[var(--muted)] hover:shadow-sm transition-all duration-200 text-left text-xs ${sidebarOpen ? 'gap-3 px-3' : 'justify-center w-full px-0'}`}
                             >
                                 <HardDrive className="w-4 h-4 flex-shrink-0" />
-                                {sidebarOpen && <span>{t('sidebar_drive')}</span>}
+                                <span className={`whitespace-nowrap overflow-hidden transition-all duration-200 ${sidebarOpen ? 'w-auto opacity-100' : 'w-0 opacity-0'}`}>{t('sidebar_drive')}</span>
                             </button>
 
                             <div className="hidden"></div>
@@ -1338,8 +1382,9 @@ export default function DashboardPage() {
                                             <div
                                                 className="fixed w-60 bg-[var(--card)] border border-[var(--border)] rounded-2xl shadow-xl z-[9999] overflow-hidden animate-in zoom-in-95 duration-200"
                                                 style={{
-                                                    top: (menuPosition?.top || 0) - 220, // Position above button (approx height of menu)
-                                                    left: menuPosition?.left || 0
+                                                    top: (menuPosition?.top || 0) + 0, // Position relative to button
+                                                    left: menuPosition?.left || 0,
+                                                    transform: 'translateY(-100%) translateY(-10px)' // Move up by 100% of height + 10px gap
                                                 }}
                                             >
                                                 <div className="p-1.5 space-y-0.5">
@@ -1370,19 +1415,7 @@ export default function DashboardPage() {
                                                         </div>
                                                         {dbSearchEnabled && <Check className="w-3 h-3 text-green-500 ml-auto" />}
                                                     </button>
-                                                    <button
-                                                        onClick={() => { setCanvasModeEnabled(!canvasModeEnabled); setClipMenuOpen(false); }}
-                                                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-[var(--muted)] transition-colors text-left group"
-                                                    >
-                                                        <div className={`p-2 rounded-lg transition-colors shrink-0 ${canvasModeEnabled ? 'bg-purple-500/10 text-purple-500' : 'bg-[var(--muted)] text-[var(--muted-foreground)]'}`}>
-                                                            <Edit2 className="w-4 h-4" />
-                                                        </div>
-                                                        <div className="flex flex-col">
-                                                            <span className="text-sm font-medium whitespace-nowrap">{t('canvas_mode')}</span>
-                                                            <span className="text-[10px] text-[var(--muted-foreground)]">{t('canvas_mode_desc')}</span>
-                                                        </div>
-                                                        {canvasModeEnabled && <Check className="w-3 h-3 text-purple-500 ml-auto" />}
-                                                    </button>
+
                                                 </div>
                                             </div>
                                         </>,
@@ -1396,8 +1429,14 @@ export default function DashboardPage() {
                                         ref={textareaRef}
                                         value={input}
                                         onChange={(e) => setInput(e.target.value)}
+                                        onCompositionStart={() => setIsComposing(true)}
+                                        onCompositionEnd={(e) => {
+                                            setIsComposing(false);
+                                            // Ensure the final composed text is captured
+                                            setInput((e.target as HTMLTextAreaElement).value);
+                                        }}
                                         onKeyDown={(e) => {
-                                            if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                                            if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && !isComposing) {
                                                 e.preventDefault();
                                                 handleSendMessage();
                                             }
@@ -1414,17 +1453,32 @@ export default function DashboardPage() {
                                     {/* Model Selector */}
                                     <div className="relative">
                                         <button
-                                            onClick={() => setModelSelectorOpen(!modelSelectorOpen)}
+                                            onClick={(e) => {
+                                                const rect = e.currentTarget.getBoundingClientRect();
+                                                setModelMenuPos({ top: rect.top, right: window.innerWidth - rect.right });
+                                                setModelSelectorOpen(!modelSelectorOpen);
+                                            }}
                                             className="flex items-center gap-2 pl-2 pr-1.5 h-9 rounded-full bg-[var(--muted)]/50 hover:bg-[var(--muted)] transition-all text-xs font-medium border border-transparent hover:border-[var(--border)]"
                                         >
-                                            <span className="-translate-y-px">{selectedMode}</span>
+                                            <span className="-translate-y-px">
+                                                {settings.language === 'ja'
+                                                    ? (selectedMode === 'Fast' ? '高速' : '秘書モード')
+                                                    : selectedMode}
+                                            </span>
                                             <ChevronDown className="w-3 h-3 opacity-50" />
                                         </button>
 
-                                        {modelSelectorOpen && (
+                                        {modelSelectorOpen && typeof document !== 'undefined' && createPortal(
                                             <>
-                                                <div className="fixed inset-0 z-30" onClick={() => setModelSelectorOpen(false)} />
-                                                <div className="absolute bottom-full left-0 mb-2 w-64 bg-[var(--card)] border border-[var(--border)] rounded-2xl shadow-xl z-50 overflow-hidden animate-in zoom-in-95 duration-200">
+                                                <div className="fixed inset-0 z-[60]" onClick={(e) => { e.stopPropagation(); setModelSelectorOpen(false); }} />
+                                                <div
+                                                    className="fixed w-56 bg-[var(--card)] border border-[var(--border)] rounded-2xl shadow-xl z-[70] overflow-hidden animate-in zoom-in-95 duration-200"
+                                                    style={{
+                                                        top: (modelMenuPos?.top || 0) + 0,
+                                                        right: (modelMenuPos?.right || 0) + 0,
+                                                        transform: 'translateY(-100%) translateY(-10px)'
+                                                    }}
+                                                >
                                                     <div className="p-2 space-y-1">
                                                         {(Object.keys(models) as ModelMode[]).map((mode) => (
                                                             <button
@@ -1433,15 +1487,22 @@ export default function DashboardPage() {
                                                                 className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-colors text-left ${selectedMode === mode ? 'bg-[var(--muted)]' : 'hover:bg-[var(--muted)]/50'}`}
                                                             >
                                                                 <div className="flex flex-col gap-0.5">
-                                                                    <span className="text-sm font-medium">{mode}</span>
-                                                                    <span className="text-[10px] text-[var(--muted-foreground)]">{models[mode].name}</span>
+                                                                    <span className="text-sm font-medium">
+                                                                        {settings.language === 'ja'
+                                                                            ? (mode === 'Fast' ? '高速' : '秘書モード')
+                                                                            : mode}
+                                                                    </span>
+                                                                    {settings.language !== 'ja' && (
+                                                                        <span className="text-[10px] text-[var(--muted-foreground)]">{models[mode].name}</span>
+                                                                    )}
                                                                 </div>
                                                                 {selectedMode === mode && <Check className="w-3 h-3" />}
                                                             </button>
                                                         ))}
                                                     </div>
                                                 </div>
-                                            </>
+                                            </>,
+                                            document.body
                                         )}
                                     </div>
 

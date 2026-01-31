@@ -1,3 +1,8 @@
 {
-    "remote.autoForwardPortsFallback": 0
+    "java.server.launchMode": "Standard",
+    "java.autobuild.enabled": false,
+    "java.errors.incompleteClasspath.severity": "ignore",
+    "java.import.gradle.enabled": false,
+    "java.import.maven.enabled": false,
+    "java.jdt.ls.java.home": null
 }

@@ -1,0 +1,21 @@
+{
+  "name": "Oonanji Vault",
+  "short_name": "Oonanji",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "description": "Secure, high-speed on-premise LLM server system",
+  "icons": [
+    {
+      "src": "/img/oonanji-vault-icon.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/img/oonanji-vault-icon.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

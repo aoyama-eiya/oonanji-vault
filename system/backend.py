@@ -33,6 +33,10 @@ from passlib.context import CryptContext
 from jose import JWTError, jwt
 import asyncio
 
+# Discord Bot Integration
+# Discord Bot Removed
+
+
 # Llama.cpp
 try:
     from llama_cpp import Llama
@@ -245,7 +249,7 @@ class ModelManager:
         if self.workers:
             logger.info(f"AI Cluster Mode Enabled. Workers: {self.workers}")
 
-    def get_llm(self, model_path: str):
+    def get_llm(self, model_path: str, n_gpu_layers: int = None):
         # 1. Cluster Distribution Logic
         if self.workers:
             # Simple Random Load Balancing
@@ -277,26 +281,31 @@ class ModelManager:
              if model_path in self.llms:
                   return self.llms[model_path]
               
-             # Unload other models to free up memory
-             if self.llms:
-                logger.info("Unloading all previous LLMs to free memory...")
+             # Unload other models ONLY if it's NOT the discord model or we are loading main model over discord model
+             is_discord_model = "discord_" in str(model_path)
+             
+             if not is_discord_model and self.llms:
+                # If loading main model, we might need to unload previous main models.
+                # But try to keep discord model if it exists
+                logger.info("Cleaning up previous LLMs...")
                 keys = list(self.llms.keys())
                 for k in keys:
+                    if "discord_" in str(k): continue # Keep discord model
                     try:
                         if hasattr(self.llms[k], 'close'):
                             self.llms[k].close()
+                        del self.llms[k]
                     except Exception as ex:
                         logger.warning(f"Error closing model {k}: {ex}")
-                    del self.llms[k]
-                
-                self.llms.clear()
                 gc.collect()
             
              logger.info(f"Loading LLM: {model_path}")
              
              # Determine GPU layers based on model size hints
              layers = -1
-             if "7b" in model_path.lower() or "8b" in model_path.lower():
+             if n_gpu_layers is not None:
+                 layers = n_gpu_layers
+             elif "7b" in model_path.lower() or "8b" in model_path.lower():
                   # For larger models, force CPU to avoid VRAM OOM on limited hardware
                   logger.info("Forcing CPU for large model to ensure stability.")
                   layers = 0 
@@ -951,6 +960,9 @@ def index_documents_task():
             db_conn.close()
         state.is_indexing = False
 
+# Discord Agent Logic Removed
+
+
 # --- FastAPI App ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -1014,8 +1026,11 @@ async def lifespan(app: FastAPI):
     else:
         logger.warning(f"Fast model not found at {fast_model_path}, skipping preload.")
     
+    
     yield
+    
     # Shutdown
+
 
 app = FastAPI(lifespan=lifespan)
 
@@ -1460,6 +1475,89 @@ async def clear_indexing_status(admin: dict = Depends(get_current_admin)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+
+# --- Agent Integration ---
+try:
+    from agent_core import AgentGateway
+    agent_gateway = AgentGateway(model_manager)
+except ImportError as e:
+    logger.error(f"Failed to import Agent Core: {e}")
+    agent_gateway = None
+
+@app.post("/api/admin/agent/config")
+async def configure_agent(data: dict = Body(...), admin: dict = Depends(get_current_admin)):
+    """Configure the models for the agent"""
+    reflex_model = data.get("reflex_model")
+    planner_model = data.get("planner_model")
+    
+    if not reflex_model or not planner_model:
+        raise HTTPException(status_code=400, detail="Both reflex_model and planner_model are required")
+        
+    # Verify models exist in MODELS_DIR
+    r_path = MODELS_DIR / reflex_model
+    p_path = MODELS_DIR / planner_model
+    
+    if not r_path.exists() or not p_path.exists():
+         raise HTTPException(status_code=400, detail="One or both model files not found")
+
+    # Save to DB settings
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", ("agent_reflex_model", reflex_model))
+    cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", ("agent_planner_model", planner_model))
+    conn.commit()
+    conn.close()
+    
+    # Initialize Gateway
+    if agent_gateway:
+        agent_gateway.initialize(str(r_path), str(p_path))
+        
+    return {"status": "configured", "reflex": reflex_model, "planner": planner_model}
+
+@app.post("/api/agent/chat")
+async def agent_chat(request: ChatRequest, current_user: dict = Depends(get_current_user)):
+    """Unified entry point for talking to the Oonanji Agent"""
+    if not agent_gateway:
+        raise HTTPException(status_code=503, detail="Agent system not available")
+        
+    # Auto-initialize if needed (from cold start)
+    if not agent_gateway.agent:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("SELECT value FROM settings WHERE key = 'agent_reflex_model'")
+        r = cursor.fetchone()
+        cursor.execute("SELECT value FROM settings WHERE key = 'agent_planner_model'")
+        p = cursor.fetchone()
+        conn.close()
+        
+        if r and p:
+            r_path = MODELS_DIR / r[0]
+            p_path = MODELS_DIR / p[0]
+            if r_path.exists() and p_path.exists():
+                agent_gateway.initialize(str(r_path), str(p_path))
+            else:
+                 return {"role": "assistant", "content": "Agent Configuration Error: Model files missing. Please reconfigure in Admin."}
+        else:
+            return {"role": "assistant", "content": "Agent not configured. Please ask Admin to set Reflex and Planner models."}
+
+    # Process Request
+    session_id = request.session_id or str(uuid.uuid4())
+    
+    try:
+        response_text = await agent_gateway.handle_request(session_id, request.message)
+        
+        # Save to DB (optional, but good for persistence)
+        # Note: We should reuse the chat_messages logic here eventually
+        
+        return {
+            "role": "assistant", 
+            "content": response_text,
+            "session_id": session_id
+        }
+    except Exception as e:
+        logger.error(f"Agent Error: {e}")
+        return {"role": "assistant", "content": f"I crashed: {e}", "session_id": session_id}
 
 # --- Model Management APIs ---
 MODEL_DOWNLOAD_TASKS = {} # task_id -> {status, progress, total, filename, error}
@@ -2007,9 +2105,11 @@ async def chat_stream(request: ChatRequest, background_tasks: BackgroundTasks, c
             model_filename = request.model_id
             model_filename = request.model_id
             if request.model_id == "Fast" or request.model_id == "2":
-                model_filename = "qwen2-1.5b-instruct-q8_0.gguf"
+                model_filename = "qwen2.5-3b-instruct-q4_0.gguf"
             elif request.model_id == "Thinking" or request.model_id == "1":
-                model_filename = "qwen2.5-coder-7b-instruct-q4_k_m.gguf"
+                 # Removed "Thinking" model as per request, fallback to default
+                 model_filename = "qwen2.5-3b-instruct-q4_0.gguf"
+
             
             model_path = user_models_dir / model_filename
             if not model_path.exists():
@@ -2024,7 +2124,141 @@ async def chat_stream(request: ChatRequest, background_tasks: BackgroundTasks, c
                         yield 'data: {\"error\": \"No chat models found\"}\\n\\n'
                         return
 
-            # Initialize DB info
+            # --- AGENT ROUTING ---
+            if request.model_id.lower() == "agent" or request.model_id == "秘書モード":
+                if not agent_gateway:
+                    yield f"data: {json.dumps({'error': 'Agent system not initialized'})}\n\n"
+                    return
+
+                # Auto-initialize Agent if needed (Lazy Load)
+                if not agent_gateway.agent:
+                     conn_agent = sqlite3.connect(DB_PATH)
+                     cursor_agent = conn_agent.cursor()
+                     cursor_agent.execute("SELECT value FROM settings WHERE key = 'agent_reflex_model'")
+                     r = cursor_agent.fetchone()
+                     cursor_agent.execute("SELECT value FROM settings WHERE key = 'agent_planner_model'")
+                     p = cursor_agent.fetchone()
+                     conn_agent.close()
+                     
+                     # Force default to qwen2.5-3b if not configured or files missing
+                     default_model = MODELS_DIR / "qwen2.5-3b-instruct-q4_0.gguf"
+                     
+                     r_path_str = r[0] if r else str(default_model)
+                     p_path_str = p[0] if p else str(default_model)
+                     
+                     r_path = MODELS_DIR / r_path_str
+                     p_path = MODELS_DIR / p_path_str
+                     
+                     # Construct absolute paths if they are just filenames
+                     if not r_path.is_absolute(): r_path = MODELS_DIR / r_path.name
+                     if not p_path.is_absolute(): p_path = MODELS_DIR / p_path.name
+
+                     if not r_path.exists(): r_path = default_model
+                     if not p_path.exists(): p_path = default_model
+
+                     if r_path.exists():
+                         agent_gateway.initialize(str(r_path), str(p_path))
+                     else:
+                         yield f"data: {json.dumps({'error': 'Agent models missing (qwen2.5-3b). Check models directory.'})}\n\n"
+                         return
+
+                session_id = request.session_id
+                if not session_id:
+                     import uuid
+                     session_id = str(uuid.uuid4())
+                     
+                     # Create session record
+                     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+                     cursor = conn.cursor()
+                     cursor.execute('INSERT INTO chat_sessions (id, user_id, title) VALUES (?, ?, ?)', 
+                                   (session_id, current_user['id'], request.message[:20]))
+                     conn.commit()
+                     conn.close()
+
+                # Save User Message
+                conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+                cursor = conn.cursor()
+                ts = datetime.utcnow().isoformat()
+                cursor.execute('INSERT INTO chat_messages (session_id, role, content, timestamp) VALUES (?, ?, ?, ?)', 
+                              (session_id, 'user', request.message, ts))
+                conn.commit()
+                conn.close()
+
+                # --- Run Agent Loop with Streaming ---
+                agent = agent_gateway.agent
+                if not session_id in agent_gateway.sessions:
+                    from agent_core import AgentContext
+                    agent_gateway.sessions[session_id] = AgentContext(session_id=session_id)
+                
+                context = agent_gateway.sessions[session_id]
+                
+                # Execute the new Async Generator Loop
+                try:
+                    async for event in agent.run_solo_loop(context, request.message):
+                        if "status" in event:
+                             yield f"data: {json.dumps({'status': event['status']})}\n\n"
+                        
+                        if "thought_chunk" in event:
+                             # Direct streaming to user's view
+                             # We use a custom content wrapper or just 'content' 
+                             # The frontend appends 'content' to the last message.
+                             # To distinguish "Thought" from "Final Answer", we might want a prefix?
+                             # But ReAct output is mixed. Let's just stream it.
+                             # If we want a separate "Thought Box", frontend needs support.
+                             # For now, stream as content, but maybe blockquoted?
+                             # Real-time blockquoting is hard.
+                             # Let's stream as raw content. The user will see:
+                             # "Thought: ... Action: ..."
+                             chunk = event['thought_chunk']
+                             yield f"data: {json.dumps({'content': chunk})}\n\n"
+
+                        if "thought" in event:
+                             # Deprecated, but keep for fallback
+                             pass
+                        
+                        if "action" in event:
+                             action_md = f"\n> 🛠️ **Action**: `{event['action']}`\n> Args: `{event['input']}`\n\n"
+                             status_msg = f"Executing {event['action']}..."
+                             yield f"data: {json.dumps({'content': action_md, 'status': status_msg})}\n\n"
+                        
+                        if "observation" in event:
+                             result = event['observation']
+                             # Check for Canvas Update
+                             canvas_match = re.search(r'\[CANVAS_UPDATE\](.*?)\[/CANVAS_UPDATE\]', result, re.DOTALL)
+                             if canvas_match:
+                                 try:
+                                     canvas_data = json.loads(canvas_match.group(1))
+                                     yield f"data: {json.dumps({'canvas_content': canvas_data.get('content', ''), 'canvas_language': canvas_data.get('language', 'html')})}\n\n"
+                                     # Remove marker
+                                     result = re.sub(r'\[CANVAS_UPDATE\].*?\[/CANVAS_UPDATE\]', '', result, flags=re.DOTALL).strip()
+                                 except: pass
+                             
+                             obs_md = f"\n> 🔍 **Observation**\n> {result[:800]}\n\n"
+                             yield f"data: {json.dumps({'content': obs_md, 'status': 'Analyzed.'})}\n\n"
+
+                        if "final" in event:
+                             final_ans = event['final']
+                             # Do NOT yield content again, as it was streamed incrementally.
+                             # yield f"data: {json.dumps({'content': final_ans})}\n\n"
+                             
+                             # Save Assistant Message
+                             conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+                             cursor = conn.cursor()
+                             ts = datetime.utcnow().isoformat()
+                             cursor.execute('INSERT INTO chat_messages (session_id, role, content, timestamp) VALUES (?, ?, ?, ?)', 
+                                           (session_id, 'assistant', final_ans, ts))
+                             conn.commit()
+                             conn.close()
+                             
+                             yield f"data: {json.dumps({'session_id': session_id, 'done': True})}\n\n"
+                             return
+
+                except Exception as e:
+                    logger.error(f"Agent Loop Error: {e}")
+                    error_json = json.dumps({'content': f'\n\n[System Error: {str(e)}]\n\n'})
+                    yield f"data: {error_json}\n\n"
+                    return
+
             session_id = request.session_id
             new_session = False
             user_id = current_user['id']

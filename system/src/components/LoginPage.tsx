@@ -54,10 +54,10 @@ export default function LoginPage() {
     };
 
     return (
-        <main className="login-shell relative bg-black">
+        <main className="login-shell relative bg-white dark:bg-black">
             {/* StarryBackground removed */}
             <div className="absolute inset-0 flex items-center justify-center z-0">
-                <h1 className="text-[15vw] font-extrabold text-gray-800/50 select-none">
+                <h1 className="text-[15vw] font-extrabold select-none bg-[linear-gradient(to_right,#facc15,#f97316,#ef4444,#a855f7,#3b82f6,#22c55e)] text-transparent bg-clip-text">
                     Oonanji Vault
                 </h1>
             </div>

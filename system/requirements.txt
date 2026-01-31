@@ -16,3 +16,10 @@ lxml==5.2.2
 psutil
 httpx
 pypdf
+
+# Agent & Tools
+discord.py==2.3.2
+playwright==1.40.0
+duckduckgo-search==5.3.0
+html2text==2020.1.16
+beautifulsoup4==4.12.3
