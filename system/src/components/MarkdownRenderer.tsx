@@ -76,6 +76,18 @@ export function MarkdownRenderer({ content, onOpenCanvas }: MarkdownRendererProp
                         </code>
                     );
                 },
+                blockquote({ children }) {
+                    return (
+                        <details open className="my-2 border-l-2 border-[var(--border)] pl-2">
+                            <summary className="cursor-pointer text-xs font-semibold text-[var(--muted-foreground)] hover:text-[var(--foreground)] select-none list-none flex items-center gap-2">
+                                <span className="opacity-70">Thinking Process...</span>
+                            </summary>
+                            <div className="mt-1 text-xs text-[var(--muted-foreground)]/70 italic leading-relaxed">
+                                {children}
+                            </div>
+                        </details>
+                    );
+                }
             }}
         >
             {content}

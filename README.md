@@ -1,6 +1,5 @@
-# Oonanji Vault - On-Premise LLM System (v1.0.0)
+# Oonanji Vault - On-Premise LLM System (v1.0.1)
 <img width="1280" height="670" alt="image" src="https://github.com/user-attachments/assets/4ce22637-141b-4f08-8cbc-bfeb99341c0c" />
-
 
 A secure, localhost-based on-premise LLM chat system with NAS search capabilities (RAG).
 Designed for organizations to safely utilize internal data with zero external data transmission.
@@ -46,7 +45,21 @@ cd /opt/oonanji-vault
 # mv /opt/oonanji-vault-main /opt/oonanji-vault && cd /opt/oonanji-vault
 ```
 
-### 3. Startup (from /system directory)
+### 3. Download AI Models
+
+The system requires AI models to function. Download them into the `system/models` directory.
+
+```bash
+cd /opt/oonanji-vault/system/models
+
+# Download Embedding Model (Nomic Embed)
+curl -L -o nomic-embed-text-v1.5.f16.gguf https://huggingface.co/nomic-ai/nomic-embed-text-v1.5-GGUF/resolve/main/nomic-embed-text-v1.5.f16.gguf
+
+# Download LLM (Qwen 2.5 3B)
+curl -L -o qwen2.5-3b-instruct-q4_0.gguf https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q4_0.gguf
+```
+
+### 4. Startup (from /system directory)
 
 Go to the `system` directory and start the system with Docker:
 
@@ -59,7 +72,7 @@ Valid startup output:
 - `Container oonanji-backend Created`
 - `Container oonanji-frontend Created`
 
-### 4. Configure Auto-Start (Optional)
+### 5. Configure Auto-Start (Optional)
 
 To ensure the system starts automatically when the PC boots:
 

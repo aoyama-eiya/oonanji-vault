@@ -3,29 +3,31 @@
 @tailwind utilities;
 
 :root {
-    --background: #f9f9f9;
-    /* Slightly darker than pure white for contrast with panels */
-    --foreground: #171717;
+    --background: #f0f2f5;
+    /* Darker gray to reduce brightness/glare */
+    /* Contrast with white panels */
+    --foreground: #1a1a1a;
     --card: #ffffff;
-    --card-foreground: #171717;
-    --muted: #f3f4f6;
-    --muted-foreground: #6b7280;
-    --border: #e5e7eb;
-    --input: #e5e7eb;
-    --primary: #000000;
+    --card-foreground: #1a1a1a;
+    --muted: #e4e7eb;
+    --muted-foreground: #64748b;
+    --border: #d1d5db;
+    --input: #d1d5db;
+    --primary: #0f172a;
     --primary-foreground: #ffffff;
-    --secondary: #f3f4f6;
-    --secondary-foreground: #171717;
-    --accent: #f3f4f6;
-    --accent-foreground: #171717;
+    --secondary: #f1f5f9;
+    --secondary-foreground: #0f172a;
+    --accent: #f1f5f9;
+    --accent-foreground: #0f172a;
     --destructive: #ef4444;
     --destructive-foreground: #ffffff;
     --ring: #0a0a0a;
     --ring-rgb: 10 10 10;
     --blue: #3b82f6;
     /* A standard blue shade */
-    --radius: 9999px;
+    --radius: 16px;
 }
+
 
 [data-theme="dark"] {
     --background: #111111;
@@ -90,7 +92,7 @@ body {
     }
 
     .floating-panel {
-        @apply bg-[var(--card)] border border-[var(--border)] rounded-2xl shadow-sm overflow-hidden;
+        @apply bg-[var(--card)] border border-[var(--border)] rounded-2xl shadow-md overflow-hidden;
     }
 
     .input-field {
@@ -144,6 +146,10 @@ body {
 
     .loading-dot {
         @apply w-2 h-2 bg-[var(--foreground)] rounded-full animate-bounce;
+    }
+
+    .agent-log {
+        @apply my-2 p-3 bg-blue-50 dark:bg-blue-900/10 border-l-4 border-blue-500 rounded-r text-xs font-mono text-[var(--muted-foreground)] whitespace-pre-wrap break-words overflow-hidden;
     }
 
     .modal-overlay {

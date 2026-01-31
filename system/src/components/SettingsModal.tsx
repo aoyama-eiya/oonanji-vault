@@ -35,6 +35,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
     // Tab State
     const [activeTab, setActiveTab] = useState('general');
+    const [showSystemLicense, setShowSystemLicense] = useState(false);
 
     // Admin State
     const [users, setUsers] = useState<any[]>([]);
@@ -389,9 +390,6 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                     <button onClick={() => setActiveTab('general')} className={`w-full text-left px-4 py-3 rounded-xl text-sm font-medium transition-colors ${activeTab === 'general' ? 'bg-[var(--background)] shadow-sm text-[var(--foreground)]' : 'text-[var(--muted-foreground)] hover:bg-[var(--muted)]'}`}>
                         {t('general_settings')}
                     </button>
-                    <button onClick={() => setActiveTab('licenses')} className={`w-full text-left px-4 py-3 rounded-xl text-sm font-medium transition-colors ${activeTab === 'licenses' ? 'bg-[var(--background)] shadow-sm text-[var(--foreground)]' : 'text-[var(--muted-foreground)] hover:bg-[var(--muted)]'}`}>
-                        {t('license_info')}
-                    </button>
 
                     {isAdmin && (
                         <>
@@ -434,15 +432,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                                 <Database size={16} />
                                 <span>{t('indexing')}</span>
                             </button>
-                            <button
-                                onClick={() => setActiveTab('models')}
-                                className={`w-full text-left px-3 py-2 rounded-lg flex items-center gap-2 transition-colors mb-1
-                                    ${activeTab === 'models' ? 'bg-[var(--primary)] text-[var(--primary-foreground)]' : 'hover:bg-[var(--muted)] text-[var(--foreground)]'}
-                                `}
-                            >
-                                <Database size={16} />
-                                <span>AIモデル管理</span>
-                            </button>
+
                             <button
                                 onClick={() => setActiveTab('updates')}
                                 className={`w-full text-left px-3 py-2 rounded-lg flex items-center gap-2 transition-colors mb-1
@@ -502,76 +492,19 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                                 <ToggleSwitch enabled={settings.animationsEnabled} onChange={(value) => updateSettings({ animationsEnabled: value })} />
                             </div>
 
-                        </div>
-                    )}
-
-                    {activeTab === 'licenses' && (
-                        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
-                            <h3 className="text-lg font-bold mb-6">ライセンス情報</h3>
-                            <div className="space-y-4">
-                                <div className="p-5 rounded-2xl bg-[var(--muted)]/30 border border-[var(--border)]">
-                                    <div className="flex items-center justify-between mb-3">
-                                        <div className="font-bold">Qwen2.5-1.5B-Instruct</div>
-                                        <span className="text-[10px] px-2 py-1 rounded-full bg-[var(--background)] border border-[var(--border)] font-mono">Apache-2.0</span>
-                                    </div>
-                                    <p className="text-sm text-[var(--muted-foreground)] leading-relaxed mb-4">
-                                        このAIモデルは、Alibaba Cloudによって開発された大規模言語モデルです。
-                                        高性能なテキスト生成能力を持ち、Apache License 2.0に基づいて提供されています。
-                                    </p>
-                                    <div className="text-xs text-[var(--muted-foreground)]/70 bg-[var(--background)] p-3 rounded-lg font-mono leading-relaxed border border-[var(--border)]">
-                                        Copyright 2024 Alibaba Cloud.<br />
-                                        Licensed under the Apache License, Version 2.0 (the "License");
-                                        you may not use this file except in compliance with the License.
-                                        You may obtain a copy of the License at<br /><br />
-                                        http://www.apache.org/licenses/LICENSE-2.0
-                                    </div>
-                                </div>
-
-                                <div className="p-5 rounded-2xl bg-[var(--muted)]/30 border border-[var(--border)]">
-                                    <div className="flex items-center justify-between mb-3">
-                                        <div className="font-bold">Nomic Embed Text v1.5</div>
-                                        <span className="text-[10px] px-2 py-1 rounded-full bg-[var(--background)] border border-[var(--border)] font-mono">Apache-2.0</span>
-                                    </div>
-                                    <p className="text-sm text-[var(--muted-foreground)] leading-relaxed mb-4">
-                                        このモデルは、テキストの埋め込み（ベクトル化）を行い、ドキュメント検索機能（RAG）を実現するために使用されています。
-                                        Nomic AIによって開発され、Apache License 2.0に基づいて提供されています。
-                                    </p>
-                                    <div className="text-xs text-[var(--muted-foreground)]/70 bg-[var(--background)] p-3 rounded-lg font-mono leading-relaxed border border-[var(--border)]">
-                                        Copyright 2024 Nomic AI.<br />
-                                        Licensed under the Apache License, Version 2.0.
-                                    </div>
-                                </div>
-
-                                <div className="p-5 rounded-2xl bg-[var(--muted)]/30 border border-[var(--border)]">
-                                    <div className="flex items-center justify-between mb-3">
-                                        <div className="font-bold">llama.cpp</div>
-                                        <span className="text-[10px] px-2 py-1 rounded-full bg-[var(--background)] border border-[var(--border)] font-mono">MIT License</span>
-                                    </div>
-                                    <p className="text-sm text-[var(--muted-foreground)] leading-relaxed mb-4">
-                                        このアプリケーションの推論エンジンとして使用されています。
-                                    </p>
-                                    <div className="text-xs text-[var(--muted-foreground)]/70 bg-[var(--background)] p-3 rounded-lg font-mono leading-relaxed border border-[var(--border)]">
-                                        MIT License<br />
-                                        Copyright (c) 2023-2024 Georgi Gerganov
-                                    </div>
-                                </div>
-
-                                <div className="p-5 rounded-2xl bg-[var(--muted)]/30 border border-[var(--border)]">
-                                    <div className="flex items-center justify-between mb-3">
-                                        <div className="font-bold">Next.js</div>
-                                        <span className="text-[10px] px-2 py-1 rounded-full bg-[var(--background)] border border-[var(--border)] font-mono">MIT License</span>
-                                    </div>
-                                    <p className="text-sm text-[var(--muted-foreground)] leading-relaxed mb-4">
-                                        このアプリケーションのフレームワークとして使用されています。
-                                    </p>
-                                    <div className="text-xs text-[var(--muted-foreground)]/70 bg-[var(--background)] p-3 rounded-lg font-mono leading-relaxed border border-[var(--border)]">
-                                        MIT License<br />
-                                        Copyright (c) 2024 Vercel, Inc.
-                                    </div>
-                                </div>
+                            <div>
+                                <button
+                                    onClick={() => setShowSystemLicense(true)}
+                                    className="w-full py-3 text-[var(--muted-foreground)] hover:text-[var(--foreground)] text-xs transition-colors flex items-center justify-center gap-2 hover:underline"
+                                >
+                                    このシステムについて
+                                </button>
                             </div>
+
                         </div>
                     )}
+
+
 
                     {activeTab === 'users' && (
                         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
@@ -674,81 +607,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                         </div>
                     )}
 
-                    {activeTab === 'models' && (
-                        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
-                            <h3 className="text-lg font-bold">AIモデル管理</h3>
-                            <p className="text-sm text-[var(--muted-foreground)]">
-                                利用可能なAIモデルをダウンロード・管理します。モデルは各ユーザーの環境に自動的に複製され、独立して使用されます。
-                            </p>
 
-                            <div className="grid gap-4 mt-6">
-                                {AVAILABLE_MODELS.map((model) => {
-                                    const fileExists = modelFiles.some(f => f.name === model.name);
-                                    const task = downloadTasks[model.name];
-                                    const isDownloading = task && task.status === 'downloading';
-
-                                    return (
-                                        <div key={model.name} className="p-4 bg-[var(--background)] border border-[var(--border)] rounded-xl flex items-center justify-between">
-                                            <div className="flex-1 mr-4">
-                                                <div className="text-sm font-bold flex items-center gap-2">
-                                                    {model.name}
-                                                </div>
-                                                <div className="text-xs text-[var(--muted-foreground)] mt-1">{model.desc}</div>
-                                                <div className="text-[10px] text-blue-500 font-mono mt-1 break-all opacity-70">{model.url}</div>
-                                            </div>
-
-                                            <div className="shrink-0">
-                                                {fileExists ? (
-                                                    <button disabled className="px-3 py-1.5 bg-[var(--muted)] text-[var(--muted-foreground)] text-xs rounded-lg flex items-center gap-1 cursor-default opacity-60">
-                                                        <Check className="w-3 h-3" /> インストール済
-                                                    </button>
-                                                ) : isDownloading ? (
-                                                    <button disabled className="px-3 py-1.5 bg-blue-500/10 text-blue-500 text-xs rounded-lg flex items-center gap-1 animate-pulse">
-                                                        <Loader2 className="w-3 h-3 animate-spin" /> {task.progress}%
-                                                    </button>
-                                                ) : (
-                                                    <button
-                                                        onClick={() => startDownload(model)}
-                                                        className="px-3 py-1.5 bg-[var(--primary)] text-[var(--primary-foreground)] text-xs rounded-lg hover:opacity-90 flex items-center gap-1 transition-all"
-                                                    >
-                                                        <Download className="w-3 h-3" /> ダウンロード
-                                                    </button>
-                                                )}
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-
-                            <div className="mt-8 pt-8 border-t border-[var(--border)]">
-                                <h4 className="text-sm font-bold mb-4">ローカルモデル一覧 (models/)</h4>
-                                <div className="bg-[var(--muted)]/50 rounded-xl overflow-hidden border border-[var(--border)]">
-                                    {modelFiles.length === 0 ? (
-                                        <div className="p-4 text-xs text-[var(--muted-foreground)] text-center">モデルが見つかりません</div>
-                                    ) : (
-                                        <table className="w-full text-xs text-left">
-                                            <thead className="bg-[var(--muted)] text-[var(--muted-foreground)] font-medium">
-                                                <tr>
-                                                    <th className="p-3">ファイル名</th>
-                                                    <th className="p-3">サイズ</th>
-                                                    <th className="p-3">更新日</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-[var(--border)]">
-                                                {modelFiles.map((f, i) => (
-                                                    <tr key={i}>
-                                                        <td className="p-3 font-mono">{f.name}</td>
-                                                        <td className="p-3">{(f.size / (1024 * 1024 * 1024)).toFixed(2)} GB</td>
-                                                        <td className="p-3 opacity-70">{f.modified}</td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-                    )}
 
 
                     {activeTab === 'indexing' && nasStatus && (
@@ -1146,6 +1005,99 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                     </div>
                 )
             }
-        </div >
+
+
+            {/* System License Modal */}
+            {
+                showSystemLicense && (
+                    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={() => setShowSystemLicense(false)}>
+                        <div className="bg-[var(--card)] w-full max-w-2xl max-h-[80vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-[var(--border)]" onClick={e => e.stopPropagation()}>
+                            <div className="p-4 border-b border-[var(--border)] flex items-center justify-between bg-[var(--muted)]/50">
+                                <h3 className="font-bold text-lg">System License</h3>
+                                <button onClick={() => setShowSystemLicense(false)} className="p-2 hover:bg-[var(--muted)] rounded-full transition-colors">
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
+                            <div className="flex-1 overflow-y-auto p-6">
+                                <pre className="text-xs font-mono whitespace-pre-wrap text-[var(--muted-foreground)] bg-[var(--muted)]/30 p-4 rounded-xl border border-[var(--border)] leading-relaxed">
+                                    {`Business Source License 1.1
+
+Parameters
+
+Licensor:           Oonanji-Vault Project
+Licensed Work:      Oonanji Vault (the software and source code and documentation in this repository)
+Additional Use Grant:
+                    Personal and non-commercial use of the Licensed Work is permitted free of charge.
+                    This includes permanent use, provided that any updates to the software are 
+                    performed manually by the user.
+                    
+                    Any use of the Licensed Work for commercial purposes, including but not 
+                    limited to internal business operations within a corporation or entity, 
+                    is permitted only with a valid paid license agreement from the Licensor.
+Change Date:        2030-01-01
+Change License:     Apache License, Version 2.0
+
+--------------------------------------------------------------------------------
+
+Business Source License 1.1
+
+License text copyright (c) 2017 MariaDB Corporation Ab, All Rights Reserved.
+"Business Source License" is a trademark of MariaDB Corporation Ab.
+
+Terms
+
+The Licensor hereby grants you the right to copy, modify, create derivative works, 
+redistribute, and make non-production use of the Licensed Work. The Licensor may 
+make an Additional Use Grant, above, permitting limited production use.
+
+Effective on the Change Date, or the fourth anniversary of the first publicly 
+available distribution of a specific version of the Licensed Work under this 
+License, whichever comes first, the Licensor hereby grants you rights under the 
+terms of the Change License, and the rights granted in the paragraph above 
+terminate.
+
+If your use of the Licensed Work does not comply with the requirements in 
+effect prior to the Change Date, you must purchase a commercial license from 
+the Licensor, or refrain from using the Licensed Work.
+
+All copies of the original and modified Licensed Work, and derivative works of 
+the Licensed Work, are subject to this License. This License applies to all 
+versions of the Licensed Work that are not yet subject to the Change License 
+due to the passage of time.
+
+You must conspicuously display this License on each original or modified copy of 
+the Licensed Work.
+
+The Licensed Work is provided "as is". Except as required by law or as expressly 
+provided in this License, the Licensor makes no representations or warranties of 
+any kind concerning the Licensed Work, express, implied, statutory or otherwise, 
+including, without limitation, warranties of title, merchantability, fitness for 
+a particular purpose, non-infringement, or the absence of latent or other 
+defects, accuracy, or the presence or absence of errors, whether or not 
+discoverable.
+
+Covenants of Licensor
+
+The Licensor covenants that, as of the Change Date, the Licensed Work will 
+become available under the Change License. The Licensor will take all steps 
+necessary to ensure that the Licensed Work is available under the Change 
+License on the Change Date.`}
+                                </pre>
+                                <div className="mt-6">
+                                    <h4 className="font-bold mb-3 text-sm">Included Software</h4>
+                                    <ul className="space-y-2 text-xs text-[var(--muted-foreground)]">
+                                        <li>• Qwen2.5 (Apache 2.0) - Alibaba Cloud</li>
+                                        <li>• Nomic Embed (Apache 2.0) - Nomic AI</li>
+                                        <li>• llama.cpp (MIT) - Georgi Gerganov</li>
+                                        <li>• Next.js, React, TailwindCSS (MIT)</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )
+
+            }
+        </div>
     );
 }

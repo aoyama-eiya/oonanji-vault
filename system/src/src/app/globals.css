@@ -1,0 +1,176 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+    --background: #f9f9f9;
+    /* Slightly darker than pure white for contrast with panels */
+    --foreground: #171717;
+    --card: #ffffff;
+    --card-foreground: #171717;
+    --muted: #f3f4f6;
+    --muted-foreground: #6b7280;
+    --border: #e5e7eb;
+    --input: #e5e7eb;
+    --primary: #000000;
+    --primary-foreground: #ffffff;
+    --secondary: #f3f4f6;
+    --secondary-foreground: #171717;
+    --accent: #f3f4f6;
+    --accent-foreground: #171717;
+    --destructive: #ef4444;
+    --destructive-foreground: #ffffff;
+    --ring: #0a0a0a;
+    --ring-rgb: 10 10 10;
+    --blue: #3b82f6;
+    /* A standard blue shade */
+    --radius: 9999px;
+}
+
+[data-theme="dark"] {
+    --background: #111111;
+    --foreground: #ededed;
+    --card: #1c1c1c;
+    --card-foreground: #ededed;
+    --muted: #2a2a2a;
+    --muted-foreground: #a3a3a3;
+    --border: #3a3a3a;
+    --input: #3a3a3a;
+    --primary: #ededed;
+    --primary-foreground: #111111;
+    --secondary: #2a2a2a;
+    --secondary-foreground: #ededed;
+    --accent: #2a2a2a;
+    --accent-foreground: #ededed;
+    --destructive: #7f1d1d;
+    --destructive-foreground: #ededed;
+    --ring: #ededed;
+    --ring-rgb: 237 237 237;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+        --background: #111111;
+        --foreground: #ededed;
+        --card: #1c1c1c;
+        --card-foreground: #ededed;
+        --muted: #2a2a2a;
+        --muted-foreground: #a3a3a3;
+        --border: #3a3a3a;
+        --input: #3a3a3a;
+        --primary: #ededed;
+        --primary-foreground: #111111;
+        --secondary: #2a2a2a;
+        --secondary-foreground: #ededed;
+        --accent: #2a2a2a;
+        --accent-foreground: #ededed;
+        --destructive: #7f1d1d;
+        --destructive-foreground: #ededed;
+        --ring: #ededed;
+        --ring-rgb: 237 237 237;
+    }
+}
+
+body {
+    background: var(--background);
+    color: var(--foreground);
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 14px;
+    /* Smaller base font size */
+}
+
+.no-animations * {
+    transition: none !important;
+    animation: none !important;
+}
+
+@layer utilities {
+    .glass-surface {
+        @apply bg-[var(--card)] border border-[var(--border)] shadow-xl;
+    }
+
+    .floating-panel {
+        @apply bg-[var(--card)] border border-[var(--border)] rounded-2xl shadow-sm overflow-hidden;
+    }
+
+    .input-field {
+        @apply w-full bg-[var(--muted)] border-[0.5px] border-[var(--border)] rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[rgb(var(--ring-rgb)/0.2)] transition-all placeholder:text-[var(--muted-foreground)];
+    }
+
+    .ghost-button {
+        @apply px-4 py-2 rounded-full hover:bg-[var(--muted)] transition-colors text-sm font-medium cursor-pointer text-[var(--foreground)];
+    }
+
+    .btn-primary {
+        @apply px-4 py-3 rounded-full bg-white text-black font-semibold hover:bg-gray-100 transition-colors shadow-sm cursor-pointer flex items-center justify-center;
+    }
+
+    /* Dark mode override for btn-primary if needed, but user asked for white background */
+    [data-theme="dark"] .btn-primary {
+        @apply bg-white text-black hover:bg-gray-200;
+    }
+
+    .login-shell {
+        @apply min-h-screen flex items-center justify-center bg-[var(--background)] p-4 text-[var(--foreground)] overflow-x-hidden;
+    }
+
+    .login-panel {
+        @apply w-full max-w-md p-8 rounded-3xl bg-[var(--card)] border border-[var(--border)];
+    }
+
+    .login-quick-actions {
+        @apply grid grid-cols-2 gap-3;
+    }
+
+    .message-bubble {
+        @apply px-4 py-3 rounded-2xl;
+    }
+
+    .message-user {
+        @apply bg-[var(--foreground)] text-[var(--background)];
+    }
+
+    .message-assistant {
+        @apply bg-[var(--muted)] text-[var(--foreground)];
+    }
+
+    .send-button-circle {
+        @apply p-2 rounded-full bg-[var(--foreground)] text-[var(--background)] hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center;
+    }
+
+    .loading-dots {
+        @apply flex space-x-1;
+    }
+
+    .loading-dot {
+        @apply w-2 h-2 bg-[var(--foreground)] rounded-full animate-bounce;
+    }
+
+    .agent-log {
+        @apply my-2 p-3 bg-blue-50 dark:bg-blue-900/10 border-l-4 border-blue-500 rounded-r text-xs font-mono text-[var(--muted-foreground)] whitespace-pre-wrap break-words overflow-hidden;
+    }
+
+    .modal-overlay {
+        @apply fixed inset-0 bg-black/30;
+    }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--muted-foreground);
+    border-radius: 9999px;
+    opacity: 0.5;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--foreground);
+}

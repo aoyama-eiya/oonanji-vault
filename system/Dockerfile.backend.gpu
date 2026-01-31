@@ -1,0 +1,54 @@
+# Oonanji Vault Backend with NVIDIA GPU/CUDA Support
+# Use NVIDIA CUDA base image for GPU acceleration
+FROM nvidia/cuda:12.2.2-devel-ubuntu22.04
+
+WORKDIR /app
+
+# Install Python and build dependencies
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y \
+    python3 \
+    python3-pip \
+    python3-venv \
+    git \
+    build-essential \
+    cmake \
+    libopenblas-dev \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Link python3 to python if not exists
+RUN ln -s /usr/bin/python3 /usr/bin/python
+
+# Python Environment Variables
+ENV PYTHONUNBUFFERED=1
+# Enable CUDA for llama-cpp-python
+ENV CMAKE_ARGS="-DGGML_CUDA=on"
+ENV FORCE_CMAKE=1
+
+# Install Python dependencies
+RUN pip3 install --upgrade pip
+
+# Install llama-cpp-python with CUDA support
+# First try pre-built wheels, then fall back to building from source
+RUN pip3 install llama-cpp-python \
+    --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu122 \
+    --no-cache-dir \
+    || CMAKE_ARGS="-DGGML_CUDA=on" pip3 install llama-cpp-python --no-cache-dir --verbose
+
+# Install other dependencies
+COPY requirements.txt .
+RUN pip3 install --no-cache-dir -r requirements.txt
+
+# Copy backend code
+COPY backend.py .
+COPY indexer.py .
+COPY agent_core.py .
+
+
+# Create directories
+RUN mkdir -p models mnt internal_storage chroma_db logs skills
+
+EXPOSE 8000
+
+CMD ["python3", "-m", "uvicorn", "backend:app", "--host", "0.0.0.0", "--port", "8000"]
