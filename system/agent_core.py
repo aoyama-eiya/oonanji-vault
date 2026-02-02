@@ -188,110 +188,225 @@ class FileTool(Tool):
         except Exception as e:
             return f"File Error: {e}"
 
-
-class CanvasTool(Tool):
-    """
-    Canvas tool for the agent to generate and present visual content.
-    Inspired by ClawdBot's Live Canvas functionality.
-    
-    The agent can use this tool to:
-    - Present HTML/CSS/JS code in the Canvas panel
-    - Generate UI components, visualizations, and interactive elements
-    - Update the canvas with new content dynamically
-    """
-    
-    def __init__(self):
+class MemoryTool(Tool):
+    def __init__(self, db_handler=None):
         super().__init__(
-            name="canvas",
-            description="""Present content to the user's Canvas panel. Use this to show:
-- Generated HTML/CSS/JS code for UI components
-- Markdown documentation or reports
-- Code snippets in any programming language
-- Interactive visualizations
-
-The content will be displayed in the Canvas panel where users can view, edit, and download it.""",
+            name="memory",
+            description="""Remembers key facts about the user (e.g., name, preferences, work style).
+Use this to personalize future interactions.
+- action='remember': Store a fact (e.g., key='name', value='Taro')
+- action='forget': Remove a fact""",
             parameters={
                 "type": "object",
                 "properties": {
-                    "action": {
-                        "type": "string", 
-                        "enum": ["present", "update", "clear"],
-                        "description": "Action to perform: 'present' to show new content, 'update' to modify existing, 'clear' to reset"
-                    },
-                    "content": {
-                        "type": "string", 
-                        "description": "The content to display (HTML, CSS, JS, Markdown, or any code)"
-                    },
-                    "language": {
-                        "type": "string", 
-                        "description": "Language/type of content: html, css, javascript, python, markdown, etc.",
-                        "default": "html"
-                    },
-                    "title": {
-                        "type": "string",
-                        "description": "Optional title for the canvas content"
-                    }
+                    "action": {"type": "string", "enum": ["remember", "forget"]},
+                    "key": {"type": "string", "description": "The aspect to remember (e.g., 'user_name')"},
+                    "value": {"type": "string", "description": "The details to store"}
                 },
-                "required": ["action", "content"]
+                "required": ["action", "key"]
             }
         )
-        # This will hold the current canvas state
+        self.db_handler = db_handler
+
+    async def execute(self, **kwargs) -> str:
+        args = kwargs.get("args", kwargs)
+        action = args.get("action")
+        key = args.get("key")
+        value = args.get("value")
+        
+        if not self.db_handler:
+            return "Error: Memory database not initialized."
+            
+        try:
+            if action == "remember":
+                if not value: return "Error: Value required to remember."
+                self.db_handler(key, value)
+                return f"I will remember that {key} is {value}."
+            elif action == "forget":
+                # Handle forget logic if needed, but for now just overwrite or IGNORE
+                return "Memory updated."
+            return f"Unknown action {action}"
+        except Exception as e:
+            return f"Memory Error: {e}"
+
+
+
+class CanvasTool(Tool):
+    """
+    Canvas tool for presenting content.
+    Supports standard code presentation and A4 Document Writer template.
+    """
+    
+    def __init__(self, db_handler=None, db_save_handler=None):
+        self.db_handler = db_handler
+        self.db_save_handler = db_save_handler
+        super().__init__(
+            name="canvas",
+            description="""Present content in the side panel. 
+For DOCUMENTS/REPORTS: Use 'template="document"' and provide ONLY the text body (Markdown supported).
+For APPS/CODE: Use 'template="none"' (default) and provide full single-file HTML/JS/CSS.
+To EDIT existing: Use 'action="read"' with 'canvas_id' first.""",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "action": {"type": "string", "enum": ["present", "update", "clear", "read"]},
+                    "content": {"type": "string", "description": "The text/code content."},
+                    "language": {"type": "string", "default": "html"},
+                    "title": {"type": "string"},
+                    "template": {"type": "string", "enum": ["none", "document"], "description": "Use 'document' for A4 reports."},
+                    "canvas_id": {"type": "string", "description": "ID of canvas to read/edit"}
+                },
+                "required": ["action"]
+            }
+        )
         self.current_content = ""
+        self.current_body_text = ""
         self.current_language = "html"
         self.current_title = ""
-    
+
+    def _format_code(self, code: str, language: str) -> str:
+        """Attempt to format code if it looks minified."""
+        code = code.strip()
+        if not code: return code
+        if "\n" in code and len(code.split('\n')) > 1: return code  # Already multiline
+        
+        # Simple heuristic formatter
+        if language in ["html", "xml", "svg"]:
+            try:
+                import xml.dom.minidom
+                dom = xml.dom.minidom.parseString(code)
+                return dom.toprettyxml(indent="  ")
+            except: pass
+        
+        if language in ["javascript", "css", "c", "cpp", "java", "json", "python", "typescript"]:
+            formatted = ""
+            indent = 0
+            in_string = False
+            for char in code:
+                if char == '{' and not in_string:
+                    formatted += "{\n" + "  " * (indent + 1)
+                    indent += 1
+                elif char == '}' and not in_string:
+                    formatted += "\n" + "  " * (indent - 1) + "}"
+                    indent -= 1
+                elif char == ';' and not in_string:
+                    formatted += ";\n" + "  " * indent
+                else:
+                    formatted += char
+            return formatted if len(formatted) > len(code) else code
+            
+        return code
+
+
+
     async def execute(self, **kwargs) -> str:
         args = kwargs.get("args", kwargs)
         action = args.get("action", "present")
         content = args.get("content", "")
         language = args.get("language", "html")
         title = args.get("title", "")
-        
-        try:
-            if action == "present":
-                self.current_content = content
-                self.current_language = language
-                self.current_title = title
-                
-                # Return a special marker that backend.py will parse
-                # to send canvas content to the frontend
-                result = {
+        template = args.get("template", "none")
+        canvas_id = args.get("canvas_id")
+        session_id = args.get("session_id") # Injected by agent
+
+        if action == "read":
+             if not self.db_handler or not canvas_id:
+                 return "Error: Database handler or canvas_id missing."
+             
+             try:
+                 data = self.db_handler(canvas_id)
+                 if not data: return f"Error: Canvas ID {canvas_id} not found."
+                 
+                 self.current_content = data['content']
+                 self.current_language = data['language']
+                 self.current_title = data['title']
+                 # Check if it's a doc
+                 if self.current_language == 'document' or data.get('template') == 'document':
+                     self.current_body_text = self.current_content
+                     template = "document" 
+                 
+                 result = {
                     "canvas_action": "present",
-                    "content": content,
-                    "language": language,
-                    "title": title
-                }
-                return f"[CANVAS_UPDATE]{json.dumps(result)}[/CANVAS_UPDATE]\nCanvas updated with {language} content ({len(content)} characters)."
-                
-            elif action == "update":
-                # Append or modify existing content
-                self.current_content += "\n" + content
-                result = {
-                    "canvas_action": "update",
                     "content": self.current_content,
                     "language": self.current_language,
-                    "title": self.current_title
+                    "title": self.current_title,
+                    "canvas_id": canvas_id
                 }
-                return f"[CANVAS_UPDATE]{json.dumps(result)}[/CANVAS_UPDATE]\nCanvas content updated."
+                 return f"[CANVAS_UPDATE]{json.dumps(result)}[/CANVAS_UPDATE]\nSuccessfully read canvas {canvas_id}. Content loaded."
+             except Exception as e:
+                 return f"Error reading canvas: {e}"
+
+        # Logic to handle Document vs Standard Code
+        is_document_mode = (template == "document") or (self.current_body_text and template != "none")
+
+        try:
+            if is_document_mode:
+                # --- DOCUMENT MODE ---
+                if action == "present":
+                    self.current_body_text = content
+                    if title: self.current_title = title
+                    self.current_language = "document"
+                elif action == "update":
+                    self.current_body_text += "\n" + content
+                    if title: self.current_title = title
+                elif action == "clear":
+                    self.current_body_text = ""
+                    self.current_title = ""
                 
-            elif action == "clear":
-                self.current_content = ""
-                self.current_language = "html"
-                self.current_title = ""
-                result = {
-                    "canvas_action": "clear",
-                    "content": "",
-                    "language": "html",
-                    "title": ""
-                }
-                return f"[CANVAS_UPDATE]{json.dumps(result)}[/CANVAS_UPDATE]\nCanvas cleared."
-                
+                self.current_content = self.current_body_text
+                self.current_language = "document"
             else:
-                return f"Error: Unknown canvas action '{action}'. Valid actions: present, update, clear"
+                # --- STANDARD APP/CODE MODE ---
+                if action == "present" and template == "none":
+                    self.current_body_text = "" 
+
+                if action == "present":
+                    final_content = self._format_code(content, language)
+                    self.current_content = final_content
+                    self.current_language = language
+                    self.current_title = title
+                elif action == "update":
+                    formatted_chunk = self._format_code(content, language)
+                    self.current_content += "\n" + formatted_chunk
+                    if title: self.current_title = title
+                elif action == "clear":
+                    self.current_content = ""
+                    self.current_language = "html"
+                    self.current_title = ""
+            
+            # --- AUTO PERSISTENCE ---
+            import uuid
+            if action in ["present", "update"] and self.db_save_handler and session_id:
+                 if not canvas_id:
+                     canvas_id = str(uuid.uuid4())
+                 
+                 try:
+                     self.db_save_handler(
+                         canvas_id=canvas_id,
+                         session_id=session_id,
+                         title=self.current_title or "Untitled",
+                         content=self.current_content,
+                         language=self.current_language
+                     )
+                 except Exception as e:
+                     print(f"Error auto-saving canvas: {e}")
+
+            result = {
+                "canvas_action": action,
+                "content": self.current_content,
+                "language": self.current_language,
+                "title": self.current_title,
+                "canvas_id": canvas_id # Return ID so frontend/agent knows
+            }
+            
+            # For documents, return explicit message
+            msg = "Docs App" if is_document_mode else "Code Mode"
+            
+            return f"[CANVAS_UPDATE]{json.dumps(result)}[/CANVAS_UPDATE]\nCanvas updated ({msg}). ID: {canvas_id}"
                 
         except Exception as e:
             return f"Canvas Error: {e}"
-    
+
     def get_current_state(self) -> dict:
         """Get the current canvas state."""
         return {
@@ -300,153 +415,6 @@ The content will be displayed in the Canvas panel where users can view, edit, an
             "title": self.current_title
         }
 
-
-class SkillCreatorTool(Tool):
-    """
-    Tool for the agent to create and manage its own skills.
-    Inspired by ClawdBot's self-improving capability.
-    
-    Skills are Python files saved in the skills directory that define new tools.
-    """
-    
-    def __init__(self, skill_dir: str = None):
-        super().__init__(
-            name="skill_manager",
-            description="""Create, list, or delete skills (reusable tools). Use this when you need to:
-- Create a new tool for a repetitive task
-- Save code that can be reused later
-- List available skills
-- Delete an unused skill
-
-Skills are Python files that define Tool classes. Once created, they are automatically loaded on startup.""",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "action": {
-                        "type": "string",
-                        "enum": ["create", "list", "delete", "view"],
-                        "description": "Action to perform"
-                    },
-                    "name": {
-                        "type": "string",
-                        "description": "Skill name (for create/delete/view)"
-                    },
-                    "description": {
-                        "type": "string", 
-                        "description": "What the skill does (for create)"
-                    },
-                    "code": {
-                        "type": "string",
-                        "description": "Python code for the skill (for create). Must define a Tool subclass."
-                    }
-                },
-                "required": ["action"]
-            }
-        )
-        self.skill_dir = skill_dir or os.path.join(os.path.dirname(__file__), "skills")
-        os.makedirs(self.skill_dir, exist_ok=True)
-    
-    async def execute(self, **kwargs) -> str:
-        args = kwargs.get("args", kwargs)
-        action = args.get("action", "list")
-        name = args.get("name", "")
-        description = args.get("description", "")
-        code = args.get("code", "")
-        
-        try:
-            if action == "list":
-                skills = []
-                if os.path.exists(self.skill_dir):
-                    for f in os.listdir(self.skill_dir):
-                        if f.endswith('.py') and not f.startswith('_'):
-                            skills.append(f[:-3])
-                if skills:
-                    return f"Available skills: {', '.join(skills)}"
-                return "No skills found. Create one with action='create'."
-            
-            elif action == "create":
-                if not name:
-                    return "Error: Skill name required"
-                if not code:
-                    return "Error: Skill code required"
-                
-                # Sanitize name
-                safe_name = re.sub(r'[^a-zA-Z0-9_]', '_', name.lower())
-                file_path = os.path.join(self.skill_dir, f"{safe_name}.py")
-                
-                # Generate skill template if just function code provided
-                if "class" not in code and "Tool" not in code:
-                    # Wrap user code in a proper Tool class
-                    skill_code = f'''"""
-Auto-generated skill: {name}
-Description: {description}
-"""
-from agent_core import Tool
-import json
-
-class {safe_name.title()}Tool(Tool):
-    def __init__(self):
-        super().__init__(
-            name="{safe_name}",
-            description="""{description}""",
-            parameters={{
-                "type": "object",
-                "properties": {{
-                    "input": {{"type": "string", "description": "Input for the skill"}}
-                }},
-                "required": []
-            }}
-        )
-    
-    async def execute(self, **kwargs) -> str:
-        args = kwargs.get("args", kwargs)
-        input_val = args.get("input", "")
-        
-        # User-defined logic
-{chr(10).join("        " + line for line in code.split(chr(10)))}
-
-# Export the tool
-tool = {safe_name.title()}Tool()
-'''
-                else:
-                    skill_code = code
-                
-                # Save the skill
-                with open(file_path, 'w', encoding='utf-8') as f:
-                    f.write(skill_code)
-                
-                return f"✅ Skill '{safe_name}' created successfully at {file_path}. It will be available after restart."
-            
-            elif action == "view":
-                if not name:
-                    return "Error: Skill name required"
-                safe_name = re.sub(r'[^a-zA-Z0-9_]', '_', name.lower())
-                file_path = os.path.join(self.skill_dir, f"{safe_name}.py")
-                
-                if not os.path.exists(file_path):
-                    return f"Error: Skill '{name}' not found"
-                
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    content = f.read()
-                return f"Skill '{name}':\n```python\n{content}\n```"
-            
-            elif action == "delete":
-                if not name:
-                    return "Error: Skill name required"
-                safe_name = re.sub(r'[^a-zA-Z0-9_]', '_', name.lower())
-                file_path = os.path.join(self.skill_dir, f"{safe_name}.py")
-                
-                if not os.path.exists(file_path):
-                    return f"Error: Skill '{name}' not found"
-                
-                os.remove(file_path)
-                return f"✅ Skill '{name}' deleted. Changes will take effect after restart."
-            
-            else:
-                return f"Error: Unknown action '{action}'. Valid: create, list, view, delete"
-                
-        except Exception as e:
-            return f"Skill Manager Error: {e}"
 
 # --- Agent Core (ClawdBot Logic) ---
 
@@ -480,29 +448,34 @@ class OonanjiAgent:
         context.history.append(AgentMessage(role="user", content=user_message))
         
         system_prompt = (
-            "You are Oonanji Agent, a professional and proactive AI partner.\n"
+            "You are Oonanji Agent, a professional AI partner.\n"
+            "**LANGUAGE:** You MUST speak the SAME LANGUAGE as the User.\n"
             "You have access to the following tools:\n"
             f"{self._get_tool_schemas_json()}\n\n"
-            "## WORKFLOW\n"
-            "1. **CONSULT & PROPOSE:** For content tasks (e.g. 'Create Profile', 'Write Email'), DO NOT use coding tools immediately. Instead:\n"
-            "   - Propose a template or draft using `canvas`.\n"
-            "   - Ask the user for specific preferences or details (Hearing).\n"
-            "2. **EXECUTE:** Only use tools if necessary.\n"
-            "   - Use `canvas` for any content > 3 lines (Profiles, Code, Reports).\n"
-            "   - **WARNING:** Do NOT use `skill_manager` or `file_ops` unless the user asks to 'edit files', 'save code', or 'create a tool'. For creative text, just write it in Canvas.\n"
-            "3. **FINISH:** When done, output 'Final Answer: [Summary]'.\n\n"
-            "## RULES\n"
-            "1. **BE A SECRETARY.** Think: 'What does the user need?'. If they want a profile, give them a draft, don't build a profile-generator-tool.\n"
-            "2. **NATURAL JAPANESE.** detailed, polite, and helpful.\n"
-            "3. **FORMAT:**\n"
-            "   - **Thinking:** Start with `Thinking: [reasoning]`.\n"
-            "   - **Tool:** Use JSON ```json { ... } ```.\n"
-            "   - **Answer:** End with `Final Answer: [response]`.\n"
-            "4. **Language.** Respond in Japanese.\n"
+            "## CANVAS USAGE RULES\n"
+            "1. **DOCUMENTS (Docs App):**\n"
+            "   - Use `template='document'` to open the **Docs App**.\n"
+            "   - **Concept:** You are WRITING TEXT into the Docs App. The App handles the layout/design.\n"
+            "   - **Content:** Provide ONLY the body text (Markdown headers '#', lists, etc). NO HTML tags.\n"
+            "   - Example: `{\"tool\": \"canvas\", \"args\": {\"action\": \"present\", \"template\": \"document\", \"title\": \"Proposal\", \"content\": \"# Title\\n...\"}}`\n"
+            "2. **APPS / CODE (Standard Canvas):**\n"
+            "   - Use `template='none'`.\n"
+            "   - **Concept:** You are writing raw code (HTML/JS) for a custom widget.\n"
+            "   - **Content:** FULL single-file HTML including `<!DOCTYPE html>`.\n"
+            "3. **GENERAL:**\n"
+            "   - Start with `Thinking: ...`.\n"
+            "   - Output valid JSON inside ```json ... ``` block.\n"
+            "   - **AFTER CREATION:** You MUST output a Final Answer (e.g., 'Docsに提案書を作成しました').\n"
+            "4. **PROACTIVE CREATION:**\n"
+            "   - **DO NOT ASK FOR CLARIFICATION.**\n"
+            "   - **IMMEDIATELY** use the `canvas` tool with a best-guess draft.\n"
+            "   - **NEVER** just say 'I will create it'—ACTUALLY CALL THE TOOL.\n\n"
         )
+
 
         max_steps = 10
         step = 0
+        canvas_payload = None
         
         recent_history = context.history[-15:] if len(context.history) > 15 else context.history
         current_messages = [AgentMessage(role="system", content=system_prompt)] + recent_history
@@ -535,6 +508,17 @@ class OonanjiAgent:
                              # keep buffer for parsing later, or clear it if we don't show it?
                              # We hide tool JSON.
                              stream_buffer = "" 
+                         elif "json {" in stream_buffer or "json{" in stream_buffer:
+                             target = "json {" if "json {" in stream_buffer else "json{"
+                             idx = stream_buffer.find(target)
+                             pre = stream_buffer[:idx]
+                             if pre:
+                                 # In UNKNOWN mode, if we find JSON, anything before it is implicitly thought.
+                                 yield {"thought_chunk": "> " + pre.replace("\n", "\n\n> ")}
+                             mode = 'tool'
+                             in_json_block = True
+                             stream_buffer = "" 
+                             continue  
                          elif s.startswith("final answer:"):
                              mode = 'answer'
                              # Strip prefix
@@ -592,6 +576,19 @@ class OonanjiAgent:
                          stream_buffer = "" # Hide JSON
                          continue
 
+                     elif "json {" in stream_buffer or "json{" in stream_buffer:
+                         target = "json {" if "json {" in stream_buffer else "json{"
+                         idx = stream_buffer.find(target)
+                         pre = stream_buffer[:idx]
+                         if pre:
+                             yield {"thought_chunk": pre.replace("\n", "\n\n> ")}
+                         
+                         yield {"thought_chunk": "\n\n"}
+                         mode = 'tool'
+                         in_json_block = True
+                         stream_buffer = "" # Hide JSON
+                         continue
+
                      # Safe Output Logic
                      # If buffer gets too long, output the safe part (beginning), keeping the end for potential split tokens.
                      SAFE_WINDOW = 20
@@ -627,10 +624,18 @@ class OonanjiAgent:
                      yield {"thought_chunk": stream_buffer}
 
              # === PARSING ===
+             # === PARSING ===
              import re
+             # 1. Standard Code Block
              json_match = re.search(r"```json\s*(\{.*?\})\s*```", full_response_text, re.DOTALL)
+             
+             # 2. Loose (json { ... }) format
              if not json_match:
-                 json_match = re.search(r"^\s*(\{.*\"tool\":.*\})\s*$", full_response_text, re.DOTALL | re.MULTILINE)
+                 json_match = re.search(r"\(json\s*(\{.*?\})\s*\)", full_response_text, re.DOTALL)
+
+             # 3. Bare JSON with "tool" key
+             if not json_match:
+                 json_match = re.search(r"(\{.*\"tool\":\s*\"[a-zA-Z0-9_]+\".*\})", full_response_text, re.DOTALL)
 
              if json_match:
                  try:
@@ -648,26 +653,61 @@ class OonanjiAgent:
                      if thought:
                           yield {"thought_chunk": f"\n\n> **Thinking:** {thought}\n\n> "}
 
-                     if tool_name in self.tools:
-                         yield {"status": f"Executing {tool_name}...", "action": tool_name, "input": json.dumps(tool_args)}
-                         
-                         tool_instance = self.tools[tool_name]
-                         result = await tool_instance.execute(args=tool_args)
-                         
-                         yield {"observation": result}
-                         
-                         current_messages.append(AgentMessage(role="assistant", content=full_response_text))
-                         current_messages.append(AgentMessage(role="user", content=f"Observation: {result}"))
-                         step += 1
-                         continue
+
+
+                     if tool_name == "canvas":
+                          tool_instance = self.tools[tool_name]
+                          # INJECT session_id into tool_args
+                          tool_args['session_id'] = context.session_id 
+                          
+                          result = await tool_instance.execute(args=tool_args)
+                          
+                          # Retrieve processed content from tool state
+                          final_content = tool_instance.current_content
+                          lang = tool_instance.current_language
+                          title = tool_instance.current_title
+                          canvas_payload = f"<<<CANVAS_START>>>\nLanguage: {lang}\nTitle: {title}\n<<<CONTENT_START>>>\n{final_content}<<<CANVAS_END>>>"
+                          
+                          # Direct Event Stream for backend.py
+                          yield {"canvas_update": {
+                              "content": final_content,
+                              "language": lang,
+                              "title": title
+                          }}
+                          
+                          yield {"observation": result}
+                          
+                          # Feed simplified observation to agent to save context
+                          obs_text = f"Canvas updated. Title: {title}. Language: {lang}. Size: {len(final_content)} chars."
+                          
+                          current_messages.append(AgentMessage(role="assistant", content=full_response_text))
+                          current_messages.append(AgentMessage(role="user", content=f"Observation: {obs_text}"))
+                          step += 1
+                          continue
+
+                     elif tool_name in self.tools:
+                          yield {"status": f"Executing {tool_name}...", "action": tool_name, "input": json.dumps(tool_args)}
+                          
+                          tool_instance = self.tools[tool_name]
+                          result = await tool_instance.execute(args=tool_args)
+                          
+                          yield {"observation": result}
+                          
+                          current_messages.append(AgentMessage(role="assistant", content=full_response_text))
+                          current_messages.append(AgentMessage(role="user", content=f"Observation: {result}"))
+                          step += 1
+                          continue
+                          
                      else:
-                         yield {"thought_chunk": f"\n\n> [System: Tool '{tool_name}' not found.]"}
+                          yield {"thought_chunk": f"\n\n> [System: Tool '{tool_name}' not found.]"}
 
                  except Exception as e:
                       yield {"thought_chunk": f"\n\n> [System: Parsing Error: {e}]"}
              
              else:
                   # No tool usage. Check for Final Answer logic.
+                   # payload already streamed
+
                   context.history.append(AgentMessage(role="assistant", content=full_response_text))
                   yield {"final": full_response_text}
                   return
@@ -678,37 +718,7 @@ class OonanjiAgent:
         schemas = [t.to_schema() for t in self.tools.values()]
         return json.dumps(schemas, indent=2, ensure_ascii=False)
 
-# --- Skill Loader ---
-import importlib.util
-
-class SkillManager:
-    def __init__(self, agent: OonanjiAgent, skill_dir: str):
-        self.agent = agent
-        self.skill_dir = skill_dir
-
-    def load_skills(self):
-        if not os.path.exists(self.skill_dir):
-            return
-        
-        py_files = glob.glob(os.path.join(self.skill_dir, "*.py"))
-        for file_path in py_files:
-            try:
-                module_name = os.path.basename(file_path)[:-3]
-                spec = importlib.util.spec_from_file_location(module_name, file_path)
-                module = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(module)
-                
-                # Look for a 'tool' attribute or 'get_tool' function
-                if hasattr(module, 'tool') and isinstance(module.tool, Tool):
-                    self.agent.register_tool(module.tool)
-                    logger.info(f"Loaded skill: {module_name}")
-                elif hasattr(module, 'get_tool'):
-                    tool = module.get_tool()
-                    if isinstance(tool, Tool):
-                        self.agent.register_tool(tool)
-                        logger.info(f"Loaded skill (factory): {module_name}")
-            except Exception as e:
-                logger.error(f"Failed to load skill {file_path}: {e}")
+# SkillManager removed per user request
 
 # --- Gateway ---
 
@@ -723,7 +733,7 @@ class AgentGateway:
         # Tools
         self.skill_manager = None
 
-    def initialize(self, reflex_path: str = "", planner_path: str = ""):
+    def initialize(self, reflex_path: str = "", planner_path: str = "", db_handler = None, db_save_handler = None, db_memory_handler = None):
         # Determine model paths via model manager or defaults
         self.reflex_model_path = reflex_path or self.model_manager.fast_model_path
         self.planner_model_path = planner_path or self.model_manager.smart_model_path
@@ -737,14 +747,13 @@ class AgentGateway:
         
         # Register Core Tools
         self.agent.register_tool(FileTool())
-        self.agent.register_tool(CanvasTool())
+        self.agent.register_tool(CanvasTool(db_handler=db_handler, db_save_handler=db_save_handler))
+        self.agent.register_tool(MemoryTool(db_handler=db_memory_handler))
         
-        # Register Skill Manager
-        self.skill_manager = SkillManager(self.agent, "/opt/oonanji-vault/skills")
-        self.agent.register_tool(SkillCreatorTool(self.skill_manager.skill_dir))
-        
-        # Load Skills
-        self.skill_manager.load_skills()
+        # Skill Manager REMOVED as per user request
+        # self.skill_manager = SkillManager(self.agent, "/opt/oonanji-vault/skills")
+        # self.agent.register_tool(SkillCreatorTool(self.skill_manager.skill_dir))
+        # self.skill_manager.load_skills()
 
     async def a_run_loop(self, session_id: str, user_message: str):
         if session_id not in self.sessions:

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useAuth } from '@/lib/auth-context';
 import { useSettings } from '@/lib/settings-context';
@@ -23,6 +23,7 @@ import {
     Menu,
     Plus,
     MoreVertical,
+    MoreHorizontal,
     Trash2,
     Edit2,
     Copy,
@@ -81,7 +82,7 @@ type AttachedFile = {
 export default function DashboardPage() {
     const { user, isAuthenticated, isAdmin } = useAuth();
     const { settings } = useSettings();
-    const { t } = useTranslation();
+    const { t, lang } = useTranslation();
     const router = useRouter();
     // useSearchParams is only available in Client Components, but we are one.
     // However, DashboardPage is typically rendered inside a Suspense boundary if using useSearchParams.
@@ -133,13 +134,96 @@ export default function DashboardPage() {
     const [driveModalOpen, setDriveModalOpen] = useState(false);
     const [menuPosition, setMenuPosition] = useState<{ top: number, left: number } | null>(null);
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
-    const [driveMode, setDriveMode] = useState<'chat_history' | 'nas' | 'canvases'>('chat_history');
+    const [driveMode, setDriveMode] = useState<'all' | 'chat_history' | 'nas' | 'canvases' | 'docs'>('all');
     const [driveSearchQuery, setDriveSearchQuery] = useState('');
+    // App Mode Support
+    const [appMode, setAppMode] = useState<'none' | 'docs'>('none');
+    const [activeDocId, setActiveDocId] = useState<string | null>(null);
+
+    const [personalizedGreeting, setPersonalizedGreeting] = useState<{ prefix: string, message: string } | null>(null);
+
+    // Fallback Welcome Greeting based on philosophy
+    const fallbackGreeting = useMemo(() => {
+        const hour = new Date().getHours();
+        let timePrefix = "お疲れ様です";
+        if (hour >= 5 && hour < 11) timePrefix = "おはようございます";
+        else if (hour >= 11 && hour < 17) timePrefix = "こんにちは";
+        else if (hour >= 17 && hour < 21) timePrefix = "こんばんは";
+        else if (hour >= 21 || hour < 5) timePrefix = "静かな夜ですね";
+
+        const philosophies = [
+            "非エンジニアでも使いこなせる、極限のシンプルさを。今日も最高の成果を。",
+            "誰よりも速く、美しく。仕事が捗る「心地よい体験」をあなたに。",
+            "あなたのデータは学習に使われません。極限まで安全な書斎で、自由な創造を。",
+            "「人間の創造性を拡張する家具」として。仕事をもっと楽しく、もっと自由に。",
+            "使っていて気持ちいい。効率の先にある「情緒」を大切にしています。",
+            "汎用性を捨て、尖った性能を。最速で形にする体験を体感してください。",
+            "適度な休憩を。あなたの創造性が、最も美しく花開くために。"
+        ];
+
+        if (hour >= 22 || hour < 4) {
+            philosophies.push("夜が更けてきました。適度に休み、心身を整えましょう。");
+            philosophies.push("静かな夜ですね。安全なこの場所で、じっくりと思考を深めてください。");
+        }
+
+        const randomPhilosophy = philosophies[Math.floor(Math.random() * philosophies.length)];
+        return { prefix: timePrefix, message: randomPhilosophy };
+    }, []);
+
+    const welcomeGreeting = personalizedGreeting || fallbackGreeting;
+
+    useEffect(() => {
+        const fetchPersonalizedGreeting = async () => {
+            if (!isAuthenticated || messages.length > 0) return;
+            try {
+                const token = localStorage.getItem('access_token');
+                const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
+
+                const memRes = await fetch(`${API_URL}/api/users/me/memory`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (!memRes.ok) return;
+                const memories = await memRes.json();
+
+                if (memories.length > 0) {
+                    const hour = new Date().getHours();
+                    let timeOfDay = "afternoon";
+                    if (hour >= 5 && hour < 12) timeOfDay = "morning";
+                    else if (hour >= 18 && hour < 22) timeOfDay = "evening";
+                    else if (hour >= 22 || hour < 5) timeOfDay = "night";
+
+                    const greetRes = await fetch(`${API_URL}/api/ai/greet`, {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${token}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ memories, time_of_day: timeOfDay })
+                    });
+                    if (greetRes.ok) {
+                        const data = await greetRes.json();
+                        if (data.greeting) {
+                            setPersonalizedGreeting({
+                                prefix: fallbackGreeting.prefix,
+                                message: data.greeting
+                            });
+                        }
+                    }
+                }
+            } catch (error) {
+                console.warn('Personalized greeting failed:', error);
+            }
+        };
+
+        fetchPersonalizedGreeting();
+    }, [isAuthenticated, messages.length, fallbackGreeting.prefix]);
 
     useEffect(() => {
         // Force list view
         setViewMode('list');
     }, []);
+
+
 
     useEffect(() => {
         localStorage.setItem('driveViewMode', viewMode);
@@ -151,7 +235,7 @@ export default function DashboardPage() {
 
     // Delete Confirmation Modal State
     const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-    const [deleteTarget, setDeleteTarget] = useState<{ type: 'chat' | 'drive', name: string, id?: string } | null>(null);
+    const [deleteTarget, setDeleteTarget] = useState<{ type: 'chat' | 'drive' | 'canvas', name: string, id?: string } | null>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -162,6 +246,7 @@ export default function DashboardPage() {
     const [canvasLanguage, setCanvasLanguage] = useState('');
 
     const [canvases, setCanvases] = useState<Canvas[]>([]);
+    const [editingTitle, setEditingTitle] = useState<string | null>(null);
     const [currentCanvas, setCurrentCanvas] = useState<Canvas | null>(null);
     const [licenseModalOpen, setLicenseModalOpen] = useState(false);
 
@@ -174,12 +259,12 @@ export default function DashboardPage() {
         setSidebarOpen(false);
     }, []);
 
-    const persistCanvasState = async (content?: string, language?: string, sessionId?: string) => {
+    const persistCanvasState = async (content?: string, language?: string, sessionId?: string, title?: string) => {
         const targetSessionId = sessionId || currentSessionId;
         const targetContent = content !== undefined ? content : canvasContent;
         const targetLanguage = language !== undefined ? language : canvasLanguage;
 
-        if (!targetSessionId || !targetContent) return;
+        if (!targetSessionId) return;
 
         try {
             const token = localStorage.getItem('access_token');
@@ -187,20 +272,42 @@ export default function DashboardPage() {
 
             let url = `${API_BASE_URL}/api/canvases`;
             let method = 'POST';
+
+            // Check if we should update existing
+            let targetTitle = title;
+            if (!targetTitle && currentCanvas && (currentCanvas.session_id === targetSessionId || activeDocId === currentCanvas.id)) {
+                targetTitle = currentCanvas.title;
+            }
+            if (!targetTitle) targetTitle = t('canvas_untitled');
+
             let body: any = {
                 session_id: targetSessionId,
                 content: targetContent,
                 language: targetLanguage,
-                title: t('canvas_untitled')
+                title: targetTitle
             };
 
-            // Use the Canvas Title if available (extract from content?)
-            // For now, simple logic.
-
-            if (currentCanvas && currentCanvas.session_id === targetSessionId) {
+            if (currentCanvas && (currentCanvas.session_id === targetSessionId || activeDocId === currentCanvas.id)) {
                 url = `${API_BASE_URL}/api/canvases/${currentCanvas.id}`;
                 method = 'PUT';
-                body.title = currentCanvas.title; // Keep existing title
+            }
+
+            // If activeDocId is set, force update via ID if possible
+            if (activeDocId) {
+                url = `${API_BASE_URL}/api/canvases/${activeDocId}`;
+                method = 'PUT';
+            }
+
+            // Adjust body for PUT requests (Backend expects { data: {...}, session_id: ... })
+            if (method === 'PUT') {
+                body = {
+                    data: {
+                        title: targetTitle,
+                        content: targetContent,
+                        language: targetLanguage
+                    },
+                    session_id: targetSessionId
+                };
             }
 
             const res = await fetch(url, {
@@ -225,6 +332,7 @@ export default function DashboardPage() {
                 if (exists) return prev.map(c => c.id === saved.id ? saved : c);
                 return [saved, ...prev];
             });
+            return saved;
         } catch (e) {
             console.error("Auto-save failed", e);
         }
@@ -252,6 +360,16 @@ export default function DashboardPage() {
         }
     }, [driveModalOpen, driveMode]);
 
+    // Auto-Save Effect for Docs (Updated to pause during title edit and sync with title changes)
+    useEffect(() => {
+        if (appMode === 'docs' && activeDocId && editingTitle === null) {
+            const timer = setTimeout(() => {
+                persistCanvasState(canvasContent, 'document', currentSessionId || 'docs_create_session');
+            }, 1000);
+            return () => clearTimeout(timer);
+        }
+    }, [canvasContent, appMode, activeDocId, editingTitle, currentCanvas?.title]);
+
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     };
@@ -267,7 +385,7 @@ export default function DashboardPage() {
             fetchSessions();
         } else if (driveMode === 'nas') {
             fetchNasFiles('');
-        } else if (driveMode === 'canvases') { // New mode for Canvases
+        } else if (['canvases', 'docs', 'all'].includes(driveMode)) {
             fetchCanvases();
         }
     };
@@ -414,7 +532,9 @@ export default function DashboardPage() {
             });
             if (res.ok) {
                 const data = await res.json();
-                setSessions(data.map((s: any) => ({
+                const filtered = data.filter((s: any) => !s.id.toString().startsWith('docs_storage') && !s.id.toString().startsWith('temp_docs_') && s.title !== 'Docs Storage');
+                const sorted = filtered.sort((a: any, b: any) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
+                setSessions(sorted.map((s: any) => ({
                     ...s,
                     updated_at: s.updated_at,
                     createdAt: s.created_at || s.updated_at // Fallback
@@ -428,6 +548,7 @@ export default function DashboardPage() {
     const loadSession = async (sessionId: string) => {
         try {
             setLoading(true);
+            setCanvasOpen(false);
             setCurrentSessionId(sessionId);
             const token = localStorage.getItem('access_token');
             const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
@@ -497,6 +618,14 @@ export default function DashboardPage() {
                 if (!res.ok) throw new Error('Delete failed');
                 // If drive files were managed, this would trigger a re-fetch
                 // For now, this branch is mostly for NAS files if they were to be deleted via 'drive' type
+            } else if (deleteTarget.type === 'canvas' && deleteTarget.id) {
+                const res = await fetch(`${API_URL}/api/canvases/${deleteTarget.id}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (!res.ok) throw new Error('Delete failed');
+                setCanvases(prev => prev.filter(c => c.id !== deleteTarget.id));
+                setMenuOpenId(null);
             }
         } catch (error) {
             console.error('Delete failed:', error);
@@ -592,9 +721,29 @@ export default function DashboardPage() {
         }
     };
 
+    const createNewDoc = async () => {
+        setDriveModalOpen(false);
+        setSidebarOpen(false);
+
+        const initialContent = '';
+        const initialLang = 'document';
+        setCanvasContent(initialContent);
+        setCanvasLanguage(initialLang);
+
+        // Persist immediately
+        const saved = await persistCanvasState(initialContent, initialLang, currentSessionId || 'temp_doc_init');
+
+        if (saved) {
+            setCurrentCanvas(saved);
+            setAppMode('docs');
+            setActiveDocId(saved.id);
+        }
+    };
+
     const startNewChat = () => {
         setCurrentSessionId(null);
         setMessages([]);
+        setCanvasOpen(false);
         if (window.innerWidth < 768) setSidebarOpen(false);
     };
 
@@ -797,8 +946,18 @@ export default function DashboardPage() {
         e.stopPropagation();
     };
 
-    const handleSendMessage = async () => {
-        if ((!input.trim() && attachedFiles.length === 0) || loading) return;
+    const handleSendMessage = async (arg1?: React.SyntheticEvent | string, arg2?: string) => {
+        let textInput = input;
+        let sessionOverride = null;
+
+        if (typeof arg1 === 'string') {
+            textInput = arg1;
+            if (arg2) sessionOverride = arg2;
+        } else if (arg1) {
+            arg1.preventDefault();
+        }
+
+        if ((!textInput.trim() && attachedFiles.length === 0) || loading) return;
 
         // Block if files are not ready
         if (attachedFiles.some(f => f.status !== 'ready' && f.status !== 'error')) {
@@ -806,12 +965,12 @@ export default function DashboardPage() {
             return;
         }
 
-        let messageContent = input;
+        let messageContent = textInput;
         const fileIds = attachedFiles.map(f => f.id).filter(Boolean);
         const fileTexts = attachedFiles.filter(f => !f.id && f.content).map(f => `--- File: ${f.name} ---\n${f.content}\n--- End File ---`).join('\n\n');
 
         if (fileTexts) {
-            messageContent = `以下の添付ファイルの内容を参照して回答してください:\n\n${fileTexts}\n\n質問:\n${input}`;
+            messageContent = `以下の添付ファイルの内容を参照して回答してください:\n\n${fileTexts}\n\n質問:\n${textInput}`;
         }
 
         // If we have file IDs, we don't append text to the message, we send IDs.
@@ -826,10 +985,19 @@ export default function DashboardPage() {
         setMessages((prev) => [...prev, userMessage]);
 
         // For the actual request
-        const requestMessage = messageContent;
+        let requestMessage = messageContent;
+
+        // Context Injection for Docs Mode
+        if (appMode === 'docs' && activeDocId && canvasContent) {
+            const truncatedContent = canvasContent.length > 50000 ? canvasContent.slice(0, 50000) + '... (truncated)' : canvasContent;
+            requestMessage = `以下のドキュメントの内容を読み取って、ユーザーの指示に従ってください。回答は日本語でお願いします。\n\n--- ドキュメントのタイトル: ${currentCanvas?.title || '無題'} ---\n${truncatedContent}\n--- ここまで ---\n\nユーザーの指示: ${requestMessage}`;
+        }
 
         const currentInput = requestMessage;
-        setInput('');
+
+        // Only clear input if we didn't use an override text (i.e. user typed it)
+        if (typeof arg1 !== 'string') setInput('');
+
         setAttachedFiles([]);
         setLoading(true);
         setIsStreaming(true);
@@ -838,6 +1006,7 @@ export default function DashboardPage() {
         // Create AI message placeholder ID
         const aiMessageId = (Date.now() + 1).toString();
         setCurrentAiMessageId(aiMessageId);
+        setMessages(prev => [...prev, { id: aiMessageId, role: 'assistant', content: '', timestamp: new Date().toISOString() }]);
 
         try {
             const token = localStorage.getItem('access_token');
@@ -853,12 +1022,12 @@ export default function DashboardPage() {
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                    message: currentInput,
+                    message: requestMessage,
                     model_id: selectedModel.id,
                     use_nas: dbSearchEnabled,
-                    session_id: currentSessionId,
+                    session_id: sessionOverride || currentSessionId, // Changed from overrideSessionId
                     attached_file_ids: fileIds,
-                    canvas_mode: input.toLowerCase().includes('canvas') || input.includes('キャンバス') // Auto-enable if keyword found
+                    canvas_mode: textInput.toLowerCase().includes('canvas') || textInput.includes('キャンバス') // Auto-enable if keyword found
                 }),
                 signal: controller.signal
             });
@@ -1210,7 +1379,7 @@ export default function DashboardPage() {
 
                                         return (
                                             <div key={message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                                <div className={`max-w-[80%] rounded-2xl px-4 py-3 ${message.role === 'user' ? 'bg-[var(--foreground)] text-[var(--background)]' : 'bg-[var(--muted)]'}`}>
+                                                <div className={`max-w-[80%] rounded-2xl px-4 py-3 break-all overflow-hidden ${message.role === 'user' ? 'bg-[var(--foreground)] text-[var(--background)]' : 'bg-[var(--muted)]'}`}>
                                                     <div className="prose prose-sm dark:prose-invert max-w-none">
                                                         {/* Custom Renderer to hide Canvas raw data and show button */}
                                                         {(() => {
@@ -1222,7 +1391,11 @@ export default function DashboardPage() {
                                                                 <>
                                                                     {parts.map((part, i) => (
                                                                         <React.Fragment key={i}>
-                                                                            <MarkdownRenderer content={part} onOpenCanvas={handleOpenCanvas} />
+                                                                            <MarkdownRenderer
+                                                                                content={part}
+                                                                                onOpenCanvas={handleOpenCanvas}
+                                                                                onShowCanvas={() => setCanvasOpen(true)}
+                                                                            />
                                                                             {matches && matches[i] && (
                                                                                 <div className="my-4 p-4 rounded-xl bg-[var(--card)] border border-[var(--border)] shadow-sm flex items-center justify-between group hover:border-[var(--foreground)] transition-colors cursor-pointer"
                                                                                     onClick={() => {
@@ -1240,7 +1413,10 @@ export default function DashboardPage() {
                                                                                             <Edit2 className="w-5 h-5" />
                                                                                         </div>
                                                                                         <div className="flex flex-col">
-                                                                                            <span className="font-semibold text-[var(--foreground)]">Canvas Created</span>
+                                                                                            <span className="font-semibold text-[var(--foreground)]">{(() => {
+                                                                                                const t = /Title: (.*)\n/.exec(matches[i] || '');
+                                                                                                return t ? t[1] : 'Canvas Created';
+                                                                                            })()}</span>
                                                                                             <span className="text-xs text-[var(--muted-foreground)]">Click to open and edit</span>
                                                                                         </div>
                                                                                     </div>
@@ -1291,10 +1467,13 @@ export default function DashboardPage() {
                             }`}
                     >
                         {messages.length === 0 && (
-                            <div className="mb-8 text-center animate-in fade-in zoom-in-95 duration-700">
-                                <h2 className="text-4xl font-bold text-[var(--muted-foreground)]/20 select-none">
-                                    {t('welcome_message')}
-                                </h2>
+                            <div className="mb-8 text-center animate-in fade-in zoom-in-95 duration-1000">
+                                <h1 className="text-3xl font-bold bg-gradient-to-r from-[var(--foreground)] to-[var(--muted-foreground)] bg-clip-text text-transparent mb-2">
+                                    {welcomeGreeting.prefix}
+                                </h1>
+                                <p className="text-[var(--muted-foreground)] text-sm max-w-lg mx-auto leading-relaxed opacity-80 font-medium">
+                                    {welcomeGreeting.message}
+                                </p>
                             </div>
                         )}
                         <div className={`relative bg-[var(--card)] rounded-[2.5rem] shadow-lg border border-[var(--border)] transition-all duration-300 focus-within:shadow-2xl focus-within:ring-2 focus-within:ring-[var(--primary)]/20 ${loading ? 'opacity-50 pointer-events-none' : ''}`}>
@@ -1589,16 +1768,22 @@ export default function DashboardPage() {
                             <div className="w-[200px] flex-none bg-[#2c2c2c]/50 border-r border-white/5 flex flex-col pt-3 pb-2 backdrop-blur-md">
                                 <div className="flex flex-col gap-1 p-2">
                                     <button
-                                        onClick={() => setDriveMode('chat_history')}
-                                        className={`px-3 py-2 text-left rounded-lg text-sm font-medium transition-colors ${driveMode === 'chat_history' ? 'bg-white/10 text-white' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
+                                        onClick={() => setDriveMode('all')}
+                                        className={`px-3 py-2 text-left rounded-lg text-sm font-medium transition-colors ${driveMode === 'all' ? 'bg-white/10 text-white' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
                                     >
-                                        {t('chat_history')}
+                                        マイドライブ
+                                    </button>
+                                    <button
+                                        onClick={() => setDriveMode('docs')}
+                                        className={`px-3 py-2 text-left rounded-lg text-sm font-medium transition-colors ${driveMode === 'docs' ? 'bg-white/10 text-white' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
+                                    >
+                                        {lang === 'ja' ? 'ドキュメント' : 'Docs'}
                                     </button>
                                     <button
                                         onClick={() => setDriveMode('canvases')}
                                         className={`px-3 py-2 text-left rounded-lg text-sm font-medium transition-colors ${driveMode === 'canvases' ? 'bg-white/10 text-white' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
                                     >
-                                        {t('all_canvases')}
+                                        Canvas
                                     </button>
                                     <button
                                         onClick={() => setDriveMode('nas')}
@@ -1607,94 +1792,168 @@ export default function DashboardPage() {
                                         {t('nas_storage')}
                                     </button>
                                 </div>
-                                <div className="mt-auto p-4 border-t border-white/10">
-                                    <div className="text-xs text-gray-500">{t('storage_usage')}</div>
-                                    <div className="w-full h-1 bg-white/10 rounded-full mt-2 overflow-hidden">
-                                        <div className="h-full bg-blue-500 w-1/3" />
-                                    </div>
-                                </div>
                             </div>
 
                             {/* Main Content Area */}
                             <div className="flex-1 flex flex-col bg-[#1e1e1e]">
                                 {/* Header */}
-                                <div className="h-14 border-b border-white/10 flex items-center justify-between px-6">
-                                    <div className="text-lg font-medium text-white">
-                                        {driveMode === 'chat_history' ? 'チャット履歴' : driveMode === 'canvases' ? 'すべてのキャンバス' : '内部ストレージ'}
+                                <div className="h-10 border-b border-white/10 flex items-center justify-between px-4 bg-[#2c2c2c]/30">
+                                    <div className="text-sm font-semibold text-white/90">
+                                        {driveMode === 'all' ? 'マイドライブ' : driveMode === 'docs' ? (lang === 'ja' ? 'ドキュメント' : 'Docs') : driveMode === 'canvases' ? 'Canvas' : driveMode === 'nas' ? 'NAS' : 'チャット履歴'}
                                     </div>
+                                    {driveMode === 'docs' && (
+                                        <button
+                                            onClick={createNewDoc}
+                                            className="bg-zinc-700 hover:bg-zinc-600 text-white text-[11px] px-2 py-1 rounded shadow-sm flex items-center gap-1 transition-colors"
+                                        >
+                                            <Plus className="w-3 h-3" /> 新規作成
+                                        </button>
+                                    )}
+                                </div>
+
+                                {/* Table Header (Finder Style) */}
+                                <div className="flex items-center px-4 py-1 text-[11px] text-gray-500 border-b border-white/5 select-none bg-[#1e1e1e]">
+                                    <div className="w-8"></div>
+                                    <div className="flex-1 px-2">名前</div>
+                                    <div className="w-32 px-2 border-l border-white/5">更新日時</div>
+                                    <div className="w-24 px-2 border-l border-white/5">種類</div>
+                                    <div className="w-8"></div>
                                 </div>
 
                                 {/* File List */}
-                                <div className="flex-1 overflow-y-auto p-6">
-                                    {driveMode === 'chat_history' ? (
-                                        <div className="grid grid-cols-1 gap-2">
-                                            {sessions.map((session) => (
+                                <div className="flex-1 overflow-y-auto" onClick={() => setMenuOpenId(null)}>
+                                    {driveMode === 'all' && (
+                                        <div className="flex flex-col">
+                                            {[
+                                                { name: lang === 'ja' ? 'ドキュメント' : 'Docs', type: 'folder', mode: 'docs' },
+                                                { name: 'Canvas', type: 'folder', mode: 'canvases' },
+                                                { name: 'NAS', type: 'folder', mode: 'nas' }
+                                            ].map((item, i) => (
                                                 <div
-                                                    key={session.id}
-                                                    onClick={() => { loadSession(session.id); setDriveModalOpen(false); }}
-                                                    className="flex items-center gap-4 p-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/10 transition-all cursor-pointer group"
+                                                    key={i}
+                                                    className="flex items-center px-4 py-2 hover:bg-blue-600/20 group text-[13px] border-b border-white/5 cursor-pointer"
+                                                    onClick={() => setDriveMode(item.mode as any)}
                                                 >
-                                                    <div className="p-3 rounded-lg bg-blue-500/20 text-blue-400">
-                                                        <MessageSquare className="w-5 h-5" />
-                                                    </div>
-                                                    <div className="flex-1 min-w-0">
-                                                        <h3 className="text-sm font-medium text-gray-200 truncate group-hover:text-white transition-colors">{session.title}</h3>
-                                                        <p className="text-xs text-gray-500 mt-1">{new Date(session.updated_at).toLocaleString()}</p>
-                                                    </div>
-                                                    <ChevronRight className="w-4 h-4 text-gray-600 group-hover:text-gray-400" />
+                                                    <div className="w-8 flex justify-center text-blue-300"><Folder className="w-5 h-5 fill-current opacity-70" /></div>
+                                                    <div className="flex-1 px-2 font-medium text-gray-200">{item.name}</div>
+                                                    <div className="w-32 px-2 text-gray-500">Folder</div>
+                                                    <div className="w-24 px-2 text-gray-500">Folder</div>
+                                                    <div className="w-8"></div>
                                                 </div>
                                             ))}
                                         </div>
-                                    ) : driveMode === 'canvases' ? (
-                                        <div className="grid grid-cols-1 gap-2">
-                                            {canvases.length === 0 && <div className="text-center text-gray-500 py-10">キャンバスが見つかりません</div>}
-                                            {canvases.map((canvas) => (
+                                    )}
+
+                                    {(driveMode === 'docs' || driveMode === 'canvases') && (
+                                        <div className="flex flex-col">
+                                            {/* Filter and Deduplicate Logic */}
+                                            {Array.from(new Map(canvases.filter(c => {
+                                                if (driveMode === 'docs') return c.language === 'document' || c.language === 'markdown';
+                                                if (driveMode === 'canvases') return c.language !== 'document' && c.language !== 'markdown';
+                                                return true;
+                                            }).map(item => [item.id, item])).values()).map((canvas) => (
                                                 <div
                                                     key={canvas.id}
+                                                    className="flex items-center px-4 py-1.5 hover:bg-blue-600/20 group text-[13px] border-b border-white/5 cursor-pointer relative"
                                                     onClick={() => {
-                                                        loadSession(canvas.session_id);
-                                                        setDriveModalOpen(false);
-                                                        setDriveModalOpen(false);
-                                                        setTimeout(() => handleOpenCanvas(canvas.content, canvas.language, canvas), 500);
+                                                        if (canvas.language === 'document' || canvas.language === 'markdown') {
+                                                            setDriveModalOpen(false);
+                                                            setCurrentCanvas(canvas);
+                                                            setCanvasOpen(true);
+                                                            setCanvasContent(canvas.content);
+                                                            setCanvasLanguage('document');
+                                                            setAppMode('docs');
+                                                            setActiveDocId(canvas.id);
+                                                            setCurrentSessionId(`temp_docs_${canvas.id}`);
+                                                        } else {
+                                                            loadSession(canvas.session_id);
+                                                            setDriveModalOpen(false);
+                                                            setTimeout(() => handleOpenCanvas(canvas.content, canvas.language, canvas), 500);
+                                                            setAppMode('none');
+                                                        }
                                                     }}
-                                                    className="flex items-center gap-4 p-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/10 transition-all cursor-pointer group"
                                                 >
-                                                    <div className="p-3 rounded-lg bg-purple-500/20 text-purple-400">
-                                                        <Edit2 className="w-5 h-5" />
+                                                    <div className="w-8 flex justify-center text-gray-400">
+                                                        {canvas.language === 'document' ? <FileText className="w-4 h-4 text-blue-400" /> : <Edit2 className="w-4 h-4 text-purple-400" />}
                                                     </div>
-                                                    <div className="flex-1 min-w-0">
-                                                        <h3 className="text-sm font-medium text-gray-200 truncate group-hover:text-white transition-colors">{canvas.title || '無題のキャンバス'}</h3>
-                                                        <p className="text-xs text-gray-500 mt-1">{canvas.language} • {new Date(canvas.updated_at).toLocaleString()}</p>
+                                                    <div className="flex-1 px-2 truncate font-medium text-gray-300 group-hover:text-white">
+                                                        {canvas.title || '無題'}
                                                     </div>
-                                                    <ChevronRight className="w-4 h-4 text-gray-600 group-hover:text-gray-400" />
+                                                    <div className="w-32 px-2 text-gray-500 text-[11px]">
+                                                        {new Date(canvas.updated_at).toLocaleString([], { year: 'numeric', month: '2-digit', day: '2-digit' })}
+                                                    </div>
+                                                    <div className="w-24 px-2 text-gray-500 text-[11px]">
+                                                        {canvas.language === 'document' ? 'Document' : 'Canvas'}
+                                                    </div>
+                                                    <div className="w-8 flex justify-center relative" onClick={(e) => e.stopPropagation()}>
+                                                        <button
+                                                            className="p-1 hover:bg-white/10 rounded transition-colors text-gray-500 hover:text-white"
+                                                            onClick={(e) => handleMenuClick(canvas.id, e)}
+                                                        >
+                                                            <MoreHorizontal className="w-4 h-4" />
+                                                        </button>
+                                                        {menuOpenId === canvas.id && (
+                                                            <div className="absolute right-0 top-6 bg-[#2c2c2c] border border-white/10 shadow-xl rounded-lg z-50 w-32 py-1 flex flex-col text-left">
+                                                                <button
+                                                                    className="px-3 py-1.5 hover:bg-white/10 text-left text-xs"
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        // Rename Logic 
+                                                                        const newName = prompt('新しい名前を入力:', canvas.title);
+                                                                        if (newName) {
+                                                                            const tk = localStorage.getItem('access_token');
+                                                                            fetch(`/api/canvases/${canvas.id}`, {
+                                                                                method: 'PUT',
+                                                                                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${tk}` },
+                                                                                body: JSON.stringify({ data: { title: newName }, session_id: canvas.session_id })
+                                                                            }).then(r => r.json()).then(d => {
+                                                                                setCanvases(prev => prev.map(c => c.id === d.id ? d : c));
+                                                                                setMenuOpenId(null);
+                                                                            });
+                                                                        }
+                                                                    }}
+                                                                >
+                                                                    名前を変更
+                                                                </button>
+                                                                <button
+                                                                    className="px-3 py-1.5 hover:bg-red-500/20 text-red-400 hover:text-red-300 text-left text-xs"
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        setDeleteTarget({ type: 'canvas', id: canvas.id, name: canvas.title || 'Canvas' });
+                                                                        setDeleteConfirmOpen(true);
+                                                                        setMenuOpenId(null);
+                                                                    }}
+                                                                >
+                                                                    削除
+                                                                </button>
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             ))}
                                         </div>
-                                    ) : (
-                                        // NAS / Internal View
-                                        <div className={viewMode === 'grid' ? 'grid grid-cols-4 gap-4' : 'flex flex-col gap-2'}>
+                                    )}
+
+                                    {/* NAS / Internal View Reuse */}
+                                    {driveMode === 'nas' && (
+                                        <div className="flex flex-col">
                                             {nasFiles.map((file, i) => (
                                                 <div
                                                     key={i}
-                                                    onClick={() => !file.is_dir ? handleNasFileSelect(file) : null}
-                                                    onDoubleClick={() => handleNasFileDoubleClick(file)}
-                                                    className={`
-                                                    ${viewMode === 'grid'
-                                                            ? 'p-4 flex flex-col gap-3 items-center text-center aspect-square justify-center'
-                                                            : 'flex items-center gap-4 p-4'
-                                                        }
-                                                    rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/10 transition-all cursor-pointer group
-                                                `}
+                                                    onClick={() => handleNasFileSelect(file)}
+                                                    className="flex items-center px-4 py-1.5 hover:bg-blue-600/20 group text-[13px] border-b border-white/5 cursor-pointer"
                                                 >
-                                                    <div className={`
-                                                    ${viewMode === 'grid' ? 'p-4 rounded-2xl' : 'p-3 rounded-lg'} 
-                                                    bg-[#2a2a2a] text-gray-400 group-hover:text-white transition-colors
-                                                `}>
-                                                        {file.is_dir ? <Folder className={viewMode === 'grid' ? 'w-8 h-8' : 'w-5 h-5'} /> : <File className={viewMode === 'grid' ? 'w-8 h-8' : 'w-5 h-5'} />}
+                                                    <div className="w-8 flex justify-center text-gray-400">
+                                                        {file.is_dir ? <Folder className="w-4 h-4 text-blue-300" /> : <File className="w-4 h-4" />}
                                                     </div>
-                                                    <div className="flex-1 min-w-0">
-                                                        <h3 className="text-sm font-medium text-gray-200 truncate group-hover:text-white transition-colors">{file.name}</h3>
-                                                        <p className="text-xs text-gray-500 mt-1">{file.is_dir ? 'フォルダ' : (file.size ? (file.size / 1024).toFixed(1) + ' KB' : '')}</p>
+                                                    <div className="flex-1 px-2 truncate font-medium text-gray-300 group-hover:text-white">
+                                                        {file.name}
+                                                    </div>
+                                                    <div className="w-32 px-2 text-gray-500 text-[11px]">
+                                                        -
+                                                    </div>
+                                                    <div className="w-24 px-2 text-gray-500 text-[11px]">
+                                                        {file.is_dir ? 'Folder' : 'File'}
                                                     </div>
                                                 </div>
                                             ))}
@@ -1706,69 +1965,73 @@ export default function DashboardPage() {
                     </div>
                 )}
                 {/* File Preview Modal */}
-                {showPreviewModal && previewFile && (
-                    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-8" onClick={() => setShowPreviewModal(false)}>
-                        <div className="w-[90vw] h-[90vh] bg-[#1e1e1e] rounded-xl shadow-2xl flex flex-col overflow-hidden border border-white/10" onClick={e => e.stopPropagation()}>
-                            <div className="h-12 border-b border-white/10 flex items-center justify-between px-6 bg-[#252526]">
-                                <div className="font-medium text-white flex items-center gap-2">
-                                    <FileText className="w-4 h-4 text-blue-400" />
-                                    {previewFile.name}
-                                </div>
-                                <button onClick={() => setShowPreviewModal(false)} className="p-2 hover:bg-white/10 rounded-lg text-gray-400 hover:text-white">
-                                    <X className="w-5 h-5" />
-                                </button>
-                            </div>
-                            <div className="flex-1 overflow-auto bg-[#1e1e1e] p-0 relative">
-                                {previewFile.type === 'image' ? (
-                                    <div className="w-full h-full flex items-center justify-center bg-[url('/checkerboard.png')]">
-                                        <img src={previewFile.url} alt={previewFile.name} className="max-w-full max-h-full object-contain" />
+                {
+                    showPreviewModal && previewFile && (
+                        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-8" onClick={() => setShowPreviewModal(false)}>
+                            <div className="w-[90vw] h-[90vh] bg-[#1e1e1e] rounded-xl shadow-2xl flex flex-col overflow-hidden border border-white/10" onClick={e => e.stopPropagation()}>
+                                <div className="h-12 border-b border-white/10 flex items-center justify-between px-6 bg-[#252526]">
+                                    <div className="font-medium text-white flex items-center gap-2">
+                                        <FileText className="w-4 h-4 text-blue-400" />
+                                        {previewFile.name}
                                     </div>
-                                ) : previewFile.type === 'pdf' ? (
-                                    <iframe src={previewFile.url} className="w-full h-full border-none" />
-                                ) : (
-                                    <pre className="p-6 text-sm font-mono text-gray-300 whitespace-pre-wrap">{previewFile.content}</pre>
-                                )}
+                                    <button onClick={() => setShowPreviewModal(false)} className="p-2 hover:bg-white/10 rounded-lg text-gray-400 hover:text-white">
+                                        <X className="w-5 h-5" />
+                                    </button>
+                                </div>
+                                <div className="flex-1 overflow-auto bg-[#1e1e1e] p-0 relative">
+                                    {previewFile.type === 'image' ? (
+                                        <div className="w-full h-full flex items-center justify-center bg-[url('/checkerboard.png')]">
+                                            <img src={previewFile.url} alt={previewFile.name} className="max-w-full max-h-full object-contain" />
+                                        </div>
+                                    ) : previewFile.type === 'pdf' ? (
+                                        <iframe src={previewFile.url} className="w-full h-full border-none" />
+                                    ) : (
+                                        <pre className="p-6 text-sm font-mono text-gray-300 whitespace-pre-wrap">{previewFile.content}</pre>
+                                    )}
+                                </div>
                             </div>
                         </div>
-                    </div>
-                )}
+                    )
+                }
 
                 {/* Delete Confirmation Modal */}
-                {deleteConfirmOpen && (
-                    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
-                        <div className="bg-[var(--card)] w-[400px] rounded-3xl shadow-2xl border border-[var(--border)] p-6 animate-in zoom-in-95 duration-200">
-                            <h3 className="text-lg font-bold mb-2">削除の確認</h3>
-                            <p className="text-sm text-[var(--muted-foreground)] mb-6">
-                                {deleteTarget?.type === 'chat' && 'このチャットを削除しますか？'}
-                                {deleteTarget?.type === 'drive' && `「${deleteTarget.name}」を削除しますか？`}
-                            </p>
-                            <div className="flex gap-3 justify-end">
-                                <button
-                                    onClick={() => {
-                                        setDeleteConfirmOpen(false);
-                                        setDeleteTarget(null);
-                                    }}
-                                    className="px-4 py-2 rounded-xl bg-[var(--muted)] hover:bg-[var(--muted)]/80 transition-colors font-medium text-sm"
-                                >
-                                    キャンセル
-                                </button>
-                                <button
-                                    onClick={confirmDelete}
-                                    className="px-4 py-2 rounded-xl bg-red-500 hover:bg-red-600 text-white transition-colors font-medium text-sm"
-                                >
-                                    削除
-                                </button>
+                {
+                    deleteConfirmOpen && (
+                        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+                            <div className="bg-[var(--card)] w-[400px] rounded-3xl shadow-2xl border border-[var(--border)] p-6 animate-in zoom-in-95 duration-200">
+                                <h3 className="text-lg font-bold mb-2">削除の確認</h3>
+                                <p className="text-sm text-[var(--muted-foreground)] mb-6">
+                                    {deleteTarget?.type === 'chat' && 'このチャットを削除しますか？'}
+                                    {deleteTarget?.type === 'drive' && `「${deleteTarget.name}」を削除しますか？`}
+                                </p>
+                                <div className="flex gap-3 justify-end">
+                                    <button
+                                        onClick={() => {
+                                            setDeleteConfirmOpen(false);
+                                            setDeleteTarget(null);
+                                        }}
+                                        className="px-4 py-2 rounded-xl bg-[var(--muted)] hover:bg-[var(--muted)]/80 transition-colors font-medium text-sm"
+                                    >
+                                        キャンセル
+                                    </button>
+                                    <button
+                                        onClick={confirmDelete}
+                                        className="px-4 py-2 rounded-xl bg-red-500 hover:bg-red-600 text-white transition-colors font-medium text-sm"
+                                    >
+                                        削除
+                                    </button>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                )}
+                    )
+                }
 
                 <SettingsModal isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
 
-            </div>
+            </div >
 
             {/* Canvas Panel (Right Side) */}
-            <div className={`
+            < div className={`
                 floating-panel transition-all duration-300 ease-in-out flex-shrink-0
                 ${canvasOpen ? 'w-[500px] xl:w-[700px] opacity-100 ml-4' : 'w-0 opacity-0 ml-0 overflow-hidden'}
             `}>
@@ -1779,10 +2042,155 @@ export default function DashboardPage() {
                         content={canvasContent}
                         language={canvasLanguage}
                         onContentChange={(newContent) => setCanvasContent(newContent)}
-
+                        onSave={() => persistCanvasState(canvasContent, canvasLanguage, currentSessionId || undefined)}
                     />
                 </div>
-            </div>
-        </div>
+            </div >
+            {/* App Mode Overlay - Docs */}
+            {
+                appMode === 'docs' && (
+                    <div className="fixed inset-0 z-[100] bg-[var(--background)] flex flex-col animate-in fade-in duration-200 text-[var(--foreground)]">
+                        <div className="flex items-center justify-between px-4 h-14 border-b border-[var(--border)] bg-[var(--card)]">
+                            <div className="flex items-center gap-4">
+                                <button
+                                    onClick={() => {
+                                        setAppMode('none');
+                                        setActiveDocId(null);
+                                        setCanvasOpen(false);
+                                        setCanvasContent('');
+                                        setCanvasLanguage('');
+                                        setMessages([]);
+                                        setCurrentSessionId(null);
+                                        setCurrentCanvas(null);
+                                        setEditingTitle(null);
+                                    }}
+                                    className="p-2 hover:bg-[var(--muted)] rounded-full transition-colors flex items-center justify-center h-10 w-10"
+                                    title="ホームに戻る"
+                                >
+                                    <LayoutGrid className="w-5 h-5 flex-shrink-0" />
+                                </button>
+                                <div className="flex items-center gap-2 bg-[var(--muted)]/50 px-3 py-1 rounded-lg hover:bg-[var(--muted)] transition-colors group">
+                                    <FileText className="w-5 h-5 text-blue-500" />
+                                    <input
+                                        type="text"
+                                        value={editingTitle !== null ? editingTitle : (currentCanvas?.title || '')}
+                                        onChange={(e) => setEditingTitle(e.target.value)}
+                                        onBlur={async () => {
+                                            if (editingTitle !== null && editingTitle !== currentCanvas?.title) {
+                                                const titleToSave = editingTitle;
+                                                // Optimistic update
+                                                setCurrentCanvas(prev => prev ? { ...prev, title: titleToSave } : null);
+                                                // Persist
+                                                await persistCanvasState(undefined, undefined, undefined, titleToSave);
+                                            }
+                                            setEditingTitle(null);
+                                        }}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter') {
+                                                e.preventDefault();
+                                                (e.currentTarget as HTMLInputElement).blur();
+                                            }
+                                        }}
+                                        className="font-bold text-lg bg-transparent border-none focus:ring-0 focus:outline-none transition-colors w-[300px] text-[var(--foreground)] placeholder-gray-400"
+                                        placeholder="無題のドキュメント"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                        <div className="flex-1 flex overflow-hidden">
+                            {/* Main Doc Area */}
+                            <div className="flex-1 relative h-full">
+                                <CanvasPanel
+                                    isOpen={true}
+                                    onClose={() => { }}
+                                    content={canvasContent}
+                                    language="document"
+                                    onContentChange={setCanvasContent}
+                                    onSave={() => persistCanvasState(canvasContent, 'document', currentSessionId || undefined)}
+                                />
+                            </div>
+                            {/* AI Sidebar for Docs */}
+                            <div className="w-[500px] border-l border-[var(--border)] bg-[var(--card)] flex flex-col shadow-2xl z-20">
+                                <div className="p-3 border-b border-[var(--border)] font-medium text-sm shadow-sm text-center">
+                                    アシスタント
+                                </div>
+
+                                {/* Chat Messages Area */}
+                                <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                                    {messages.length === 0 && (
+                                        <div className="flex flex-col items-center justify-center h-24 text-center">
+                                            <div className="text-[var(--muted-foreground)] text-xs">
+                                                このドキュメントについてお手伝いできることはありますか？
+                                            </div>
+                                        </div>
+                                    )}
+                                    {messages.map(msg => (
+                                        <div key={msg.id} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+                                            <div className={`max-w-[85%] p-3 rounded-2xl text-sm whitespace-pre-wrap ${msg.role === 'user' ? 'bg-blue-600 text-white rounded-br-none' : 'bg-[var(--muted)] text-[var(--foreground)] rounded-tl-none'}`}>
+                                                {msg.content || (isStreaming && msg.id === currentAiMessageId ? '解析中...' : null)}
+                                            </div>
+
+                                        </div>
+                                    ))}
+                                    {isStreaming && (
+                                        <div className="flex justify-start">
+                                            <div className="bg-[var(--muted)] p-3 rounded-2xl rounded-tl-none text-sm flex items-center gap-2">
+                                                <div className="w-2 h-2 bg-green-500 rounded-full animate-bounce" />
+                                                <div className="w-2 h-2 bg-green-500 rounded-full animate-bounce delay-75" />
+                                                <div className="w-2 h-2 bg-green-500 rounded-full animate-bounce delay-150" />
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Helper Buttons & Input */}
+                                <div className="p-6 bg-[var(--card)] flex flex-col gap-4">
+                                    {messages.length === 0 && (
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <button
+                                                onClick={() => handleSendMessage(`このドキュメントを要約してください。`)}
+                                                className="p-2.5 rounded-xl border border-[var(--border)] hover:bg-[var(--muted)] text-xs transition-all flex items-center justify-center gap-2 hover:shadow-sm"
+                                            >
+                                                要約
+                                            </button>
+                                            <button
+                                                onClick={() => handleSendMessage(`このドキュメントを校正して、改善点を提案してください。`)}
+                                                className="p-2.5 rounded-xl border border-[var(--border)] hover:bg-[var(--muted)] text-xs transition-all flex items-center justify-center gap-2 hover:shadow-sm"
+                                            >
+                                                校正
+                                            </button>
+                                        </div>
+                                    )}
+
+                                    <div className="relative group">
+                                        <div className="relative flex items-center bg-[var(--muted)] rounded-[2.5rem] border border-[var(--border)] focus-within:ring-2 focus-within:ring-green-500/20 focus-within:border-green-500/50 transition-all px-2 py-1.5">
+                                            <textarea
+                                                value={input}
+                                                onChange={(e) => setInput(e.target.value)}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter' && !e.shiftKey) {
+                                                        e.preventDefault();
+                                                        handleSendMessage();
+                                                    }
+                                                }}
+                                                placeholder="メッセージを入力..."
+                                                className="flex-1 bg-transparent border-none focus:ring-0 focus:outline-none px-4 py-2.5 text-sm resize-none h-[44px] max-h-[150px] scrollbar-hide"
+                                            />
+                                            <button
+                                                onClick={() => handleSendMessage()}
+                                                disabled={!input.trim() || loading}
+                                                className={`p-2.5 bg-green-600 text-white rounded-full hover:bg-green-700 disabled:opacity-0 disabled:scale-95 transition-all shadow-lg ${!input.trim() ? 'translate-x-4 opacity-0' : 'translate-x-0 opacity-100'}`}
+                                            >
+                                                <ArrowUp className="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )
+            }
+        </div >
     );
 }

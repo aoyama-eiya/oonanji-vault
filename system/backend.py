@@ -598,6 +598,14 @@ class IndexedDocument(BaseModel):
 
 class ChunkSearchRequest(BaseModel):
     query: str = ""
+
+class MemoryEntry(BaseModel):
+    key: str
+    value: str
+
+class GreetRequest(BaseModel):
+    memories: List[MemoryEntry]
+    time_of_day: str # "morning", "afternoon", "evening", "night"
     limit: int = 10
     file_path: Optional[str] = None
 
@@ -1093,10 +1101,32 @@ async def create_canvas(data: CanvasCreate, current_user: dict = Depends(get_cur
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
     
+    # Logic to handle auto-creation of Docs Storage Session
+    docs_session_id = f"docs_storage_{current_user['id']}"
+    
+    # Remap placeholders from frontend
+    if data.session_id in ['docs_create_session', 'temp_doc_init', 'docs_storage', 'docs_storage_auto']:
+        data.session_id = docs_session_id
+
     # Verify session ownership
     cursor.execute('SELECT user_id FROM chat_sessions WHERE id = ?', (data.session_id,))
     session = cursor.fetchone()
-    if not session or session['user_id'] != current_user['id']:
+    
+    if not session:
+        # If it is the special docs session, create it on demand
+        if data.session_id == docs_session_id:
+            now_sess = datetime.utcnow().isoformat()
+            cursor.execute('''
+                INSERT INTO chat_sessions (id, user_id, title, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (docs_session_id, current_user['id'], 'Docs Storage', now_sess, now_sess))
+            conn.commit() 
+            session = {'user_id': current_user['id']}
+        else:
+            conn.close()
+            raise HTTPException(status_code=404, detail="Session not found")
+            
+    if session['user_id'] != current_user['id']:
         conn.close()
         raise HTTPException(status_code=404, detail="Session not found")
         
@@ -1157,6 +1187,12 @@ async def update_canvas(canvas_id: str, data: CanvasUpdate, session_id: Optional
             params.append(canvas_id)
             cursor.execute(sql, tuple(params))
             conn.commit()
+            
+        # Return updated or created
+        cursor.execute('SELECT * FROM canvases WHERE id = ?', (canvas_id,))
+        updated = cursor.fetchone()
+        conn.close()
+        return dict(updated)
     else:
         # Create new
         if not session_id:
@@ -1231,6 +1267,76 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
 @app.get("/api/users/me")
 async def read_users_me(current_user: dict = Depends(get_current_user)):
     return current_user
+
+@app.get("/api/users/me/memory")
+async def get_user_memory(current_user: dict = Depends(get_current_user)):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT key, value FROM user_memory WHERE user_id = ?", (current_user["id"],))
+    memories = [{"key": r[0], "value": r[1]} for r in cursor.fetchall()]
+    conn.close()
+    return memories
+
+@app.post("/api/users/me/memory")
+async def save_user_memory(entry: MemoryEntry, current_user: dict = Depends(get_current_user)):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("INSERT OR REPLACE INTO user_memory (user_id, key, value) VALUES (?, ?, ?)", 
+                   (current_user["id"], entry.key, entry.value))
+    conn.commit()
+    conn.close()
+    return {"status": "saved"}
+
+@app.post("/api/ai/greet")
+async def ai_greet(req: GreetRequest, current_user: dict = Depends(get_current_user)):
+    """Generate a personalized greeting using the AI"""
+    try:
+        # Build memory context
+        mem_str = "\n".join([f"- {m.key}: {m.value}" for m in req.memories])
+        
+        system_prompt = (
+            "あなたはユーザーに寄り添う、最高にスマートで美しいAI秘書です。\n"
+            "以下の【ユーザーの記憶】と【現在の時間帯】を元に、極限までシンプルかつ心に響く、最高に美しい出迎えの一言を日本語で作成してください。\n"
+            "【制約】\n"
+            "- 返信は一言（1〜2文）のみ。\n"
+            "- 「お疲れ様です」や「おはようございます」などの挨拶を含める。\n"
+             "- 敬語（丁寧語）を使う。\n"
+            "- 余計な解説は不要。挨拶文のみを出力せよ。"
+        )
+        
+        user_prompt = f"【現在の時間帯】: {req.time_of_day}\n【ユーザーの記憶】:\n{mem_str or 'まだ記憶はありません。'}\n\n出迎えのメッセージ:"
+        
+        # Call model (Fast model)
+        # Find qwen2 1.5b or 3b
+        model_path = None
+        for p, llm in model_manager.llms.items():
+            if "qwen2" in str(p).lower():
+                model_path = p
+                break
+        
+        if not model_path:
+            # Fallback to defaults or first loaded
+            if model_manager.llms:
+                model_path = list(model_manager.llms.keys())[0]
+        
+        if not model_path:
+             return {"greeting": f"{req.time_of_day}。今日も素晴らしい一日になりますように。"}
+
+        llm = model_manager.get_llm(model_path)
+        res = llm.create_chat_completion(
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            max_tokens=64,
+            temperature=0.8
+        )
+        
+        greeting = res['choices'][0]['message']['content'].strip()
+        return {"greeting": greeting}
+    except Exception as e:
+        logger.error(f"Greet Error: {e}")
+        return {"greeting": "お疲れ様です。今日もあなたの創造性を最大限に引き出しましょう。"}
 
 # Admin Endpoints
 @app.get("/api/admin/users", response_model=List[UserResponse])
@@ -2156,8 +2262,74 @@ async def chat_stream(request: ChatRequest, background_tasks: BackgroundTasks, c
                      if not r_path.exists(): r_path = default_model
                      if not p_path.exists(): p_path = default_model
 
+                     # Define DB Handlers
+                     def db_read_canvas(canvas_id: str):
+                         try:
+                             conn = sqlite3.connect(DB_PATH)
+                             cur = conn.cursor()
+                             cur.execute("SELECT content, language, title FROM canvases WHERE id = ?", (canvas_id,))
+                             row = cur.fetchone()
+                             conn.close()
+                             if row:
+                                 lang = row[1]
+                                 return {"content": row[0], "language": lang, "title": row[2], "template": "document" if lang == "document" else "none"} 
+                             return None
+                         except Exception as e:
+                             print(f"DB Read Error: {e}")
+                             return None
+                     
+                     def db_save_canvas(canvas_id: str, session_id: str, title: str, content: str, language: str):
+                         try:
+                             conn = sqlite3.connect(DB_PATH)
+                             cur = conn.cursor()
+                             
+                             # App Separation Logic: Docs stored in persistent storage specific to the user
+                             target_session_id = session_id
+                             # Check if it's a doc (language or content heuristic could apply, but 'document' is explicit)
+                             if language == 'document':
+                                 # Find owner of current session
+                                 cur.execute("SELECT user_id FROM chat_sessions WHERE id = ?", (session_id,))
+                                 row = cur.fetchone()
+                                 if row:
+                                     user_id = row[0]
+                                     # Use a persistent session for this user's docs
+                                     target_session_id = f"docs_storage_{user_id}"
+                                     # Ensure persistent session exists
+                                     cur.execute("INSERT OR IGNORE INTO chat_sessions (id, user_id, title) VALUES (?, ?, ?)", 
+                                                 (target_session_id, user_id, "My Docs"))
+                             
+                             now = datetime.utcnow().isoformat()
+                             cur.execute("""
+                                 INSERT INTO canvases (id, session_id, title, content, language, created_at, updated_at)
+                                 VALUES (?, ?, ?, ?, ?, ?, ?)
+                                 ON CONFLICT(id) DO UPDATE SET
+                                     session_id=excluded.session_id,
+                                     title=excluded.title,
+                                     content=excluded.content,
+                                     language=excluded.language,
+                                     updated_at=excluded.updated_at
+                             """, (canvas_id, target_session_id, title, content, language, now, now))
+                             conn.commit()
+                             conn.close()
+                         except Exception as e:
+                             print(f"DB Save Error: {e}")
+
+                     def db_save_memory(key: str, value: str):
+                         try:
+                             conn = sqlite3.connect(DB_PATH)
+                             cur = conn.cursor()
+                             cur.execute("INSERT OR REPLACE INTO user_memory (user_id, key, value) VALUES (?, ?, ?)", 
+                                        (current_user["id"], key, value))
+                             conn.commit()
+                             conn.close()
+                         except Exception as e:
+                             print(f"Memory Save Error: {e}")
+
                      if r_path.exists():
-                         agent_gateway.initialize(str(r_path), str(p_path))
+                         agent_gateway.initialize(str(r_path), str(p_path), 
+                                               db_handler=db_read_canvas, 
+                                               db_save_handler=db_save_canvas,
+                                               db_memory_handler=db_save_memory)
                      else:
                          yield f"data: {json.dumps({'error': 'Agent models missing (qwen2.5-3b). Check models directory.'})}\n\n"
                          return
@@ -2220,6 +2392,10 @@ async def chat_stream(request: ChatRequest, background_tasks: BackgroundTasks, c
                              action_md = f"\n> 🛠️ **Action**: `{event['action']}`\n> Args: `{event['input']}`\n\n"
                              status_msg = f"Executing {event['action']}..."
                              yield f"data: {json.dumps({'content': action_md, 'status': status_msg})}\n\n"
+
+                        if "canvas_update" in event:
+                             c_data = event['canvas_update']
+                             yield f"data: {json.dumps({'canvas_content': c_data.get('content', ''), 'canvas_language': c_data.get('language', 'html'), 'canvas_title': c_data.get('title', '')})}\n\n"
                         
                         if "observation" in event:
                              result = event['observation']
