@@ -125,7 +125,7 @@ body {
     }
 
     .message-bubble {
-        @apply px-4 py-3 rounded-2xl;
+        @apply px-4 py-3 rounded-2xl break-words break-all overflow-hidden max-w-full;
     }
 
     .message-user {
