@@ -53,11 +53,13 @@ export const DOCS_APP_TEMPLATE = `<!DOCTYPE html>
             color: #1d1d1f;
             white-space: pre-wrap; 
             overflow-wrap: break-word;
+            font-size: 11pt; /* Explicit standard size */
         }
 
         /* 文字サイズを調整（少し小さくしました） */
         #document-editor h1 { font-size: 24pt; font-weight: 700; margin: 0.5em 0; line-height: 1.1; }
-        #document-editor h2 { font-size: 18pt; font-weight: 600; margin: 1em 0 0.5em; border-bottom: 1px solid #eee; }
+        #document-editor h2 { font-size: 18pt; font-weight: 600; margin: 1em 0 0.5em; /* border removed */ }
+        #document-editor h3 { font-size: 14pt; font-weight: 600; margin: 0.8em 0 0.4em; }
         #document-editor ul { list-style-type: disc; padding-left: 1.5em; }
         #document-editor ol { list-style-type: decimal; padding-left: 1.5em; }
         #document-editor blockquote { border-left: 3px solid #007aff; padding-left: 1em; color: #86868b; margin: 1em 0; }
@@ -255,6 +257,13 @@ export const DOCS_APP_TEMPLATE = `<!DOCTYPE html>
         });
         // ------------------------
 
+        // ------------------------
+        
+        // Ensure default is paragraph if empty
+        if (!editor.innerHTML.trim()) {
+            editor.innerHTML = '<p><br></p>';
+        }
+
         let currentZoom = 1.0;
         let lastSelectedImage = null;
 
@@ -411,16 +420,35 @@ export const DOCS_APP_TEMPLATE = `<!DOCTYPE html>
             if (!selection.rangeCount) return;
             const node = selection.anchorNode;
             if (node.nodeType === Node.TEXT_NODE) {
+                // Get full text
                 const text = node.textContent;
-                if (text.startsWith('# ') && node.parentElement.tagName === 'DIV') { 
+                
+                let tag = '';
+                let removeLen = 0;
+
+                if (text.startsWith('# ')) { tag = 'H1'; removeLen = 2; }
+                else if (text.startsWith('## ')) { tag = 'H2'; removeLen = 3; }
+                else if (text.startsWith('### ')) { tag = 'H3'; removeLen = 4; }
+                else if (text.startsWith('- ')) { 
+                    // List is special, execCommand handles it well usually, but let's do manually to be safe
                     node.textContent = text.substring(2);
-                    document.execCommand('formatBlock', false, 'H1');
-                } else if (text.startsWith('## ') && node.parentElement.tagName === 'DIV') {
-                    node.textContent = text.substring(3);
-                    document.execCommand('formatBlock', false, 'H2');
-                } else if (text.startsWith('- ') && node.parentElement.tagName === 'DIV') {
-                     node.textContent = text.substring(2);
-                     document.execCommand('insertUnorderedList');
+                    document.execCommand('insertUnorderedList');
+                    return;
+                }
+
+                if (tag) {
+                     // Safe transformation to avoid warping
+                     // 1. Remove the markdown characters (# ) using Range to preserve Undo/history better than text replacement
+                     const range = document.createRange();
+                     range.setStart(node, 0);
+                     range.setEnd(node, removeLen);
+                     range.deleteContents();
+
+                     // 2. Clean any existing format (bold etc)
+                     document.execCommand('removeFormat');
+
+                     // 3. Apply Block
+                     document.execCommand('formatBlock', false, tag);
                 }
             }
             
@@ -431,12 +459,54 @@ export const DOCS_APP_TEMPLATE = `<!DOCTYPE html>
         });
 
         editor.addEventListener('keydown', (e) => {
+            const selection = window.getSelection();
+            if (!selection.rangeCount) return;
+            const node = selection.anchorNode;
+            
+            // Robust Header Detection (Handle nested tags like <b>)
+            let headerNode = null;
+            let curr = node.nodeType === 3 ? node.parentElement : node;
+            while (curr && curr !== editor) {
+                if (['H1', 'H2', 'H3'].includes(curr.tagName)) {
+                    headerNode = curr;
+                    break;
+                }
+                curr = curr.parentElement;
+            }
+
             if (e.key === 'Enter') {
-                const selection = window.getSelection();
-                const node = selection.anchorNode;
-                const parent = node.nodeType === 3 ? node.parentElement : node;
-                if (['H1', 'H2'].includes(parent.tagName)) {
-                    setTimeout(() => document.execCommand('formatBlock', false, 'div'), 0);
+                if (headerNode) {
+                    e.preventDefault();
+                    // Force a completely clean paragraph break
+                    document.execCommand('insertHTML', false, '<p><br></p>');
+                }
+            } else if (e.key === 'Backspace') {
+                if (headerNode && selection.isCollapsed) {
+                     // Check if at start of the header content
+                     const range = selection.getRangeAt(0);
+                     const preCaretRange = range.cloneRange();
+                     preCaretRange.selectNodeContents(headerNode);
+                     preCaretRange.setEnd(range.endContainer, range.endOffset);
+                     
+                     // If text content before caret is empty (ignoring zero-width space), we are at start
+                     const textBefore = preCaretRange.toString();
+                     if (textBefore.replace(/\u200B/g, '').length === 0) {
+                         e.preventDefault();
+                         
+                         let prefix = '';
+                         if (headerNode.tagName === 'H1') prefix = '# ';
+                         else if (headerNode.tagName === 'H2') prefix = '## ';
+                         else if (headerNode.tagName === 'H3') prefix = '### ';
+
+                         // Revert to Paragraph
+                         document.execCommand('formatBlock', false, 'p');
+                         
+                         // Remove any \u200B artifacts to clean up
+                         // (Format block might leave them)
+                         
+                         // Insert prefix
+                         document.execCommand('insertText', false, prefix);
+                     }
                 }
             }
         });
