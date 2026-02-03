@@ -39,7 +39,9 @@ import {
     Download,
     LayoutGrid,
     List,
-    Image as ImageIcon
+    Image as ImageIcon,
+    FilePlus,
+    Sparkles
 } from 'lucide-react';
 import SettingsModal from '@/components/SettingsModal';
 import { MarkdownRenderer } from '@/components/MarkdownRenderer';
@@ -1477,6 +1479,7 @@ export default function DashboardPage() {
                             </div>
                         )}
                         <div className={`relative bg-[var(--card)] rounded-[2.5rem] shadow-lg border border-[var(--border)] transition-all duration-300 focus-within:shadow-2xl focus-within:ring-2 focus-within:ring-[var(--primary)]/20 ${loading ? 'opacity-50 pointer-events-none' : ''}`}>
+
                             {(attachedFiles.length > 0 || isUploading) && (
                                 <div className="flex flex-wrap gap-2 px-6 pt-3 pb-1">
                                     {attachedFiles.map((file, i) => (
@@ -1705,6 +1708,36 @@ export default function DashboardPage() {
                             </div>
                         </div>
                     </div>
+
+                    {/* Quick Actions - Below Input */}
+                    {messages.length === 0 && (
+                        <div className="flex flex-wrap justify-center gap-3 mt-6 animate-in fade-in slide-in-from-top-2 duration-700">
+                            <button
+                                onClick={() => { setDriveModalOpen(true); setDriveMode('nas'); }}
+                                className="flex items-center gap-2 px-4 py-2 rounded-full bg-[var(--card)] border border-[var(--border)] hover:bg-[var(--muted)] hover:shadow-sm transition-all text-xs font-semibold shadow-sm group"
+                            >
+                                <Folder className="w-3.5 h-3.5 text-blue-500" />
+                                <span>NASファイルを見る</span>
+                            </button>
+                            <button
+                                onClick={createNewDoc}
+                                className="flex items-center gap-2 px-4 py-2 rounded-full bg-[var(--card)] border border-[var(--border)] hover:bg-[var(--muted)] hover:shadow-sm transition-all text-xs font-semibold shadow-sm group"
+                            >
+                                <FilePlus className="w-3.5 h-3.5 text-green-500" />
+                                <span>ドキュメントを作成する</span>
+                            </button>
+                            <button
+                                onClick={() => {
+                                    setSelectedMode('Agent');
+                                    handleSendMessage("こんにちは");
+                                }}
+                                className="flex items-center gap-2 px-4 py-2 rounded-full bg-[var(--card)] border border-[var(--border)] hover:bg-[var(--muted)] hover:shadow-sm transition-all text-xs font-semibold shadow-sm group"
+                            >
+                                <Sparkles className="w-3.5 h-3.5 text-purple-500" />
+                                <span>秘書モードを使う</span>
+                            </button>
+                        </div>
+                    )}
                 </div>
 
                 {/* NAS File Explorer Modal */}
@@ -1762,32 +1795,32 @@ export default function DashboardPage() {
 
                 {/* Drive Modal (macOS Finder Style - Refined) */}
                 {driveModalOpen && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-8" onClick={() => setDriveModalOpen(false)}>
-                        <div className="w-[960px] h-[600px] rounded-xl shadow-2xl flex overflow-hidden animate-in zoom-in-95 duration-200 border border-white/10 bg-[#1e1e1e]/95 backdrop-blur-xl text-[13px] font-sans text-gray-200 ring-1 ring-black/50" onClick={e => e.stopPropagation()}>
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 md:p-8" onClick={() => setDriveModalOpen(false)}>
+                        <div className="w-full max-w-[960px] h-full max-h-[600px] rounded-xl shadow-2xl flex overflow-hidden animate-in zoom-in-95 duration-200 border border-[var(--border)] bg-[var(--card)] text-[13px] font-sans text-[var(--foreground)] ring-1 ring-black/10" onClick={e => e.stopPropagation()}>
                             {/* Sidebar */}
-                            <div className="w-[200px] flex-none bg-[#2c2c2c]/50 border-r border-white/5 flex flex-col pt-3 pb-2 backdrop-blur-md">
+                            <div className="w-[180px] md:w-[200px] flex-none bg-[var(--muted)]/50 border-r border-[var(--border)] flex flex-col pt-3 pb-2">
                                 <div className="flex flex-col gap-1 p-2">
                                     <button
                                         onClick={() => setDriveMode('all')}
-                                        className={`px-3 py-2 text-left rounded-lg text-sm font-medium transition-colors ${driveMode === 'all' ? 'bg-white/10 text-white' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
+                                        className={`px-3 py-2 text-left rounded-lg text-sm font-medium transition-colors ${driveMode === 'all' ? 'bg-blue-500/10 text-blue-500' : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--muted)]'}`}
                                     >
                                         マイドライブ
                                     </button>
                                     <button
                                         onClick={() => setDriveMode('docs')}
-                                        className={`px-3 py-2 text-left rounded-lg text-sm font-medium transition-colors ${driveMode === 'docs' ? 'bg-white/10 text-white' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
+                                        className={`px-3 py-2 text-left rounded-lg text-sm font-medium transition-colors ${driveMode === 'docs' ? 'bg-blue-500/10 text-blue-500' : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--muted)]'}`}
                                     >
                                         {lang === 'ja' ? 'ドキュメント' : 'Docs'}
                                     </button>
                                     <button
                                         onClick={() => setDriveMode('canvases')}
-                                        className={`px-3 py-2 text-left rounded-lg text-sm font-medium transition-colors ${driveMode === 'canvases' ? 'bg-white/10 text-white' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
+                                        className={`px-3 py-2 text-left rounded-lg text-sm font-medium transition-colors ${driveMode === 'canvases' ? 'bg-blue-500/10 text-blue-500' : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--muted)]'}`}
                                     >
                                         Canvas
                                     </button>
                                     <button
                                         onClick={() => setDriveMode('nas')}
-                                        className={`px-3 py-2 text-left rounded-lg text-sm font-medium transition-colors ${driveMode === 'nas' ? 'bg-white/10 text-white' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
+                                        className={`px-3 py-2 text-left rounded-lg text-sm font-medium transition-colors ${driveMode === 'nas' ? 'bg-blue-500/10 text-blue-500' : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--muted)]'}`}
                                     >
                                         {t('nas_storage')}
                                     </button>
@@ -1795,16 +1828,16 @@ export default function DashboardPage() {
                             </div>
 
                             {/* Main Content Area */}
-                            <div className="flex-1 flex flex-col bg-[#1e1e1e]">
+                            <div className="flex-1 flex flex-col bg-[var(--card)]">
                                 {/* Header */}
-                                <div className="h-10 border-b border-white/10 flex items-center justify-between px-4 bg-[#2c2c2c]/30">
-                                    <div className="text-sm font-semibold text-white/90">
+                                <div className="h-10 border-b border-[var(--border)] flex items-center justify-between px-4 bg-[var(--muted)]/20">
+                                    <div className="text-sm font-semibold text-[var(--foreground)]">
                                         {driveMode === 'all' ? 'マイドライブ' : driveMode === 'docs' ? (lang === 'ja' ? 'ドキュメント' : 'Docs') : driveMode === 'canvases' ? 'Canvas' : driveMode === 'nas' ? 'NAS' : 'チャット履歴'}
                                     </div>
                                     {driveMode === 'docs' && (
                                         <button
                                             onClick={createNewDoc}
-                                            className="bg-zinc-700 hover:bg-zinc-600 text-white text-[11px] px-2 py-1 rounded shadow-sm flex items-center gap-1 transition-colors"
+                                            className="bg-[var(--muted)] hover:bg-[var(--border)] text-[var(--foreground)] text-[11px] px-2 py-1 rounded shadow-sm flex items-center gap-1 transition-colors border border-[var(--border)]"
                                         >
                                             <Plus className="w-3 h-3" /> 新規作成
                                         </button>
@@ -1812,11 +1845,11 @@ export default function DashboardPage() {
                                 </div>
 
                                 {/* Table Header (Finder Style) */}
-                                <div className="flex items-center px-4 py-1 text-[11px] text-gray-500 border-b border-white/5 select-none bg-[#1e1e1e]">
+                                <div className="flex items-center px-4 py-1 text-[11px] text-[var(--muted-foreground)] border-b border-[var(--border)] select-none bg-[var(--card)]">
                                     <div className="w-8"></div>
                                     <div className="flex-1 px-2">名前</div>
-                                    <div className="w-32 px-2 border-l border-white/5">更新日時</div>
-                                    <div className="w-24 px-2 border-l border-white/5">種類</div>
+                                    <div className="w-32 px-2 border-l border-[var(--border)]">更新日時</div>
+                                    <div className="w-24 px-2 border-l border-[var(--border)]">種類</div>
                                     <div className="w-8"></div>
                                 </div>
 
@@ -1831,13 +1864,13 @@ export default function DashboardPage() {
                                             ].map((item, i) => (
                                                 <div
                                                     key={i}
-                                                    className="flex items-center px-4 py-2 hover:bg-blue-600/20 group text-[13px] border-b border-white/5 cursor-pointer"
+                                                    className="flex items-center px-4 py-2 hover:bg-blue-500/10 group text-[13px] border-b border-[var(--border)] cursor-pointer"
                                                     onClick={() => setDriveMode(item.mode as any)}
                                                 >
-                                                    <div className="w-8 flex justify-center text-blue-300"><Folder className="w-5 h-5 fill-current opacity-70" /></div>
-                                                    <div className="flex-1 px-2 font-medium text-gray-200">{item.name}</div>
-                                                    <div className="w-32 px-2 text-gray-500">Folder</div>
-                                                    <div className="w-24 px-2 text-gray-500">Folder</div>
+                                                    <div className="w-8 flex justify-center text-blue-500/70"><Folder className="w-5 h-5 fill-current opacity-70" /></div>
+                                                    <div className="flex-1 px-2 font-medium text-[var(--foreground)]">{item.name}</div>
+                                                    <div className="w-32 px-2 text-[var(--muted-foreground)]">Folder</div>
+                                                    <div className="w-24 px-2 text-[var(--muted-foreground)]">Folder</div>
                                                     <div className="w-8"></div>
                                                 </div>
                                             ))}
@@ -1854,7 +1887,7 @@ export default function DashboardPage() {
                                             }).map(item => [item.id, item])).values()).map((canvas) => (
                                                 <div
                                                     key={canvas.id}
-                                                    className="flex items-center px-4 py-1.5 hover:bg-blue-600/20 group text-[13px] border-b border-white/5 cursor-pointer relative"
+                                                    className="flex items-center px-4 py-1.5 hover:bg-blue-500/10 group text-[13px] border-b border-[var(--border)] cursor-pointer relative"
                                                     onClick={() => {
                                                         if (canvas.language === 'document' || canvas.language === 'markdown') {
                                                             setDriveModalOpen(false);
@@ -1873,29 +1906,29 @@ export default function DashboardPage() {
                                                         }
                                                     }}
                                                 >
-                                                    <div className="w-8 flex justify-center text-gray-400">
-                                                        {canvas.language === 'document' ? <FileText className="w-4 h-4 text-blue-400" /> : <Edit2 className="w-4 h-4 text-purple-400" />}
+                                                    <div className="w-8 flex justify-center text-[var(--muted-foreground)]">
+                                                        {canvas.language === 'document' ? <FileText className="w-4 h-4 text-blue-500" /> : <Edit2 className="w-4 h-4 text-purple-500" />}
                                                     </div>
-                                                    <div className="flex-1 px-2 truncate font-medium text-gray-300 group-hover:text-white">
+                                                    <div className="flex-1 px-2 truncate font-medium text-[var(--foreground)] group-hover:text-blue-500 transition-colors">
                                                         {canvas.title || '無題'}
                                                     </div>
-                                                    <div className="w-32 px-2 text-gray-500 text-[11px]">
+                                                    <div className="w-32 px-2 text-[var(--muted-foreground)] text-[11px]">
                                                         {new Date(canvas.updated_at).toLocaleString([], { year: 'numeric', month: '2-digit', day: '2-digit' })}
                                                     </div>
-                                                    <div className="w-24 px-2 text-gray-500 text-[11px]">
+                                                    <div className="w-24 px-2 text-[var(--muted-foreground)] text-[11px]">
                                                         {canvas.language === 'document' ? 'Document' : 'Canvas'}
                                                     </div>
                                                     <div className="w-8 flex justify-center relative" onClick={(e) => e.stopPropagation()}>
                                                         <button
-                                                            className="p-1 hover:bg-white/10 rounded transition-colors text-gray-500 hover:text-white"
+                                                            className="p-1 hover:bg-[var(--muted)] rounded transition-colors text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
                                                             onClick={(e) => handleMenuClick(canvas.id, e)}
                                                         >
                                                             <MoreHorizontal className="w-4 h-4" />
                                                         </button>
                                                         {menuOpenId === canvas.id && (
-                                                            <div className="absolute right-0 top-6 bg-[#2c2c2c] border border-white/10 shadow-xl rounded-lg z-50 w-32 py-1 flex flex-col text-left">
+                                                            <div className="absolute right-0 top-6 bg-[var(--card)] border border-[var(--border)] shadow-xl rounded-lg z-50 w-32 py-1 flex flex-col text-left">
                                                                 <button
-                                                                    className="px-3 py-1.5 hover:bg-white/10 text-left text-xs"
+                                                                    className="px-3 py-1.5 hover:bg-[var(--muted)] text-left text-xs text-[var(--foreground)]"
                                                                     onClick={(e) => {
                                                                         e.stopPropagation();
                                                                         // Rename Logic 
@@ -1916,7 +1949,7 @@ export default function DashboardPage() {
                                                                     名前を変更
                                                                 </button>
                                                                 <button
-                                                                    className="px-3 py-1.5 hover:bg-red-500/20 text-red-400 hover:text-red-300 text-left text-xs"
+                                                                    className="px-3 py-1.5 hover:bg-red-500/10 text-red-500 text-left text-xs"
                                                                     onClick={(e) => {
                                                                         e.stopPropagation();
                                                                         setDeleteTarget({ type: 'canvas', id: canvas.id, name: canvas.title || 'Canvas' });
@@ -1941,12 +1974,12 @@ export default function DashboardPage() {
                                                 <div
                                                     key={i}
                                                     onClick={() => handleNasFileSelect(file)}
-                                                    className="flex items-center px-4 py-1.5 hover:bg-blue-600/20 group text-[13px] border-b border-white/5 cursor-pointer"
+                                                    className="flex items-center px-4 py-1.5 hover:bg-blue-500/10 group text-[13px] border-b border-[var(--border)] cursor-pointer"
                                                 >
-                                                    <div className="w-8 flex justify-center text-gray-400">
-                                                        {file.is_dir ? <Folder className="w-4 h-4 text-blue-300" /> : <File className="w-4 h-4" />}
+                                                    <div className="w-8 flex justify-center text-[var(--muted-foreground)]">
+                                                        {file.is_dir ? <Folder className="w-4 h-4 text-blue-500/70" /> : <File className="w-4 h-4" />}
                                                     </div>
-                                                    <div className="flex-1 px-2 truncate font-medium text-gray-300 group-hover:text-white">
+                                                    <div className="flex-1 px-2 truncate font-medium text-[var(--foreground)] group-hover:text-blue-500 transition-colors">
                                                         {file.name}
                                                     </div>
                                                     <div className="w-32 px-2 text-gray-500 text-[11px]">
