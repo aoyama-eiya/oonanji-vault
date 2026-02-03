@@ -32,9 +32,15 @@ const AuthCallbackContent = () => {
 
                 if (res.ok) {
                     setStatus('Success! Redirecting...');
-                    // Redirect back to admin page
+                    // Since we opened in _blank (new window), we should close this window and refresh parent
                     setTimeout(() => {
-                        router.push('/dashboard?settings=true');
+                        if (window.opener) {
+                            window.opener.location.reload(); // Refresh parent to show new license
+                            window.close();
+                        } else {
+                            // If no opener (e.g. user manually navigated), redirect plain
+                            router.push('/dashboard?settings=true');
+                        }
                     }, 1000);
                 } else {
                     const err = await res.json();

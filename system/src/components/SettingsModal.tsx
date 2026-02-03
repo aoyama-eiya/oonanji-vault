@@ -736,7 +736,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                                                 onClick={() => {
                                                     const PORTAL_URL = 'https://oonanji-vault.com';
                                                     const APP_URL = window.location.origin;
-                                                    window.location.href = `${PORTAL_URL}/auth/authorize?redirect_uri=${APP_URL}/auth/callback`;
+                                                    window.open(`${PORTAL_URL}/auth/authorize?redirect_uri=${APP_URL}/auth/callback`, '_blank');
                                                 }}
                                                 className="px-4 py-2 bg-[var(--background)] border border-[var(--border)] rounded-lg hover:bg-[var(--muted)] text-sm transition-colors whitespace-nowrap shrink-0"
                                             >
@@ -883,7 +883,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                                                 onClick={() => {
                                                     const PORTAL_URL = 'https://oonanji-vault.com';
                                                     const APP_URL = window.location.origin;
-                                                    window.location.href = `${PORTAL_URL}/auth/authorize?redirect_uri=${APP_URL}/auth/callback`;
+                                                    window.open(`${PORTAL_URL}/auth/authorize?redirect_uri=${APP_URL}/auth/callback`, '_blank');
                                                 }}
                                                 className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-full flex items-center gap-2 shadow-sm transition-all text-sm"
                                             >
