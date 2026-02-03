@@ -450,6 +450,20 @@ class OonanjiAgent:
         system_prompt = (
             "You are Oonanji Agent, a professional AI partner.\n"
             "**LANGUAGE:** You MUST speak the SAME LANGUAGE as the User.\n"
+            "## YOUR CAPABILITIES:\n"
+            "- **Document Creation:** Can create documents via the Docs App.\n"
+            "- **Writing Assistance:** Can draft emails, reports, and other texts.\n"
+            "- **Internal Data Search:** Can search internal files and data provided in context.\n"
+            "- **Reporting & Analysis:** Can analyze data and generate summaries.\n"
+            "\n"
+            "## STRICTLY UNSUPPORTED (DO NOT CLAIM THESE):\n"
+            "- **NO Calendar/Schedule Management:** You CANNOT adjust schedules, set reminders, or access calendars.\n"
+            "- **NO Email Management:** You CANNOT send, search, or filter emails. You can ONLY draft text.\n"
+            "- **NO Icon/Image Creation:** You CANNOT create icons or images.\n"
+            "- **NO Real-time External Accounts:** You CANNOT access external user accounts.\n"
+            "\n"
+            "If asked about Secretary Mode, answer ONLY with the supported capabilities above.\n"
+            "**UNSUPPORTED:** You CANNOT manage calendars, send emails (only draft), or access external real-time accounts unless specified by tools.\n\n"
             "You have access to the following tools:\n"
             f"{self._get_tool_schemas_json()}\n\n"
             "## CANVAS USAGE RULES\n"
@@ -463,8 +477,8 @@ class OonanjiAgent:
             "   - **Concept:** You are writing raw code (HTML/JS) for a custom widget.\n"
             "   - **Content:** FULL single-file HTML including `<!DOCTYPE html>`.\n"
             "3. **GENERAL:**\n"
-            "   - Start with `Thinking: ...`.\n"
-            "   - Output valid JSON inside ```json ... ``` block.\n"
+            "   - **DIRECT ANSWER:** Just answer. DO NOT start with `Thinking:` unless you need tools.\n"
+            "   - **USING TOOLS:** Only then start with `Thinking: ...`.\n"
             "   - **AFTER CREATION:** You MUST output a Final Answer (e.g., 'Docsに提案書を作成しました').\n"
             "4. **PROACTIVE CREATION:**\n"
             "   - **DO NOT ASK FOR CLARIFICATION.**\n"
@@ -496,7 +510,13 @@ class OonanjiAgent:
                  
                  # === 1. UNKNOWN MODE (Buffering start) ===
                  if mode == 'unknown':
-                     if len(stream_buffer) > 50 or "\n" in stream_buffer:
+                     if stream_buffer and stream_buffer[0].lower() not in ["t", "f", "`", "j"]:
+                         mode = "answer"
+                         yield {"thought_chunk": stream_buffer}
+                         stream_buffer = ""
+                         continue
+
+                     if len(stream_buffer) > 15 or "\n" in stream_buffer:
                          s = stream_buffer.strip().lower()
                          if s.startswith("thinking:") or s.startswith("thought:"):
                              mode = 'thought'
@@ -592,7 +612,12 @@ class OonanjiAgent:
                      # Safe Output Logic
                      # If buffer gets too long, output the safe part (beginning), keeping the end for potential split tokens.
                      SAFE_WINDOW = 20
-                     if len(stream_buffer) > SAFE_WINDOW:
+                     if len(stream_buffer) > 200:
+                         # Stuck in thought mode? Force dump.
+                         mode = 'answer'
+                         yield {"thought_chunk": "\n\n(Auto-switch to answer)\n" + stream_buffer}
+                         stream_buffer = ""
+                     elif len(stream_buffer) > SAFE_WINDOW:
                          to_yield = stream_buffer[:-SAFE_WINDOW]
                          rest = stream_buffer[-SAFE_WINDOW:]
                          yield {"thought_chunk": to_yield.replace("\n", "\n\n> ")}
