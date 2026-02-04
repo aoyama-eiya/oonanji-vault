@@ -1,10 +1,6 @@
 # Oonanji Vault
+<img width="1920" height="1080" alt="vault-slide" src="https://github.com/user-attachments/assets/a7155358-331e-41bb-bb08-7443a50b36a1" />
 
-<div align="center">
-  <img src="https://github.com/aoyama-eiya/oonanji-vault/blob/main/system/public/android-chrome-512x512.png?raw=true" alt="Oonanji Vault Logo" width="120" />
-</div>
-
-<div align="center">
 
 **Simple, Private, AI-Powered Workspace**
 
