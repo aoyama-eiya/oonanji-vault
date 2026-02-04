@@ -1,120 +1,116 @@
-# Oonanji Vault - On-Premise LLM System (v1.0.3)
-<img width="1280" height="670" alt="image" src="https://github.com/user-attachments/assets/4ce22637-141b-4f08-8cbc-bfeb99341c0c" />
+# Oonanji Vault
 
-A secure, localhost-based on-premise LLM chat system with NAS search capabilities (RAG).
-Designed for organizations to safely utilize internal data with zero external data transmission.
+<div align="center">
+  <img src="https://github.com/aoyama-eiya/oonanji-vault/blob/main/system/public/android-chrome-512x512.png?raw=true" alt="Oonanji Vault Logo" width="120" />
+</div>
 
----
+<div align="center">
 
-## 🚀 Quick Start (Deployment Guide)
+**Simple, Private, AI-Powered Workspace**
 
-For a smooth installation on Ubuntu, please follow these steps.
-
-### 1. Prerequisites (Install Docker)
-
-If Docker is not yet installed on your system, run the following:
-
-```bash
-# Download and install Docker
-curl -fsSL https://get.docker.com -o get-docker.sh
-sudo sh get-docker.sh
-
-# Allow your user to run Docker
-sudo usermod -aG docker $USER
-newgrp docker
-```
-
-### 2. Installation (Setup in /opt)
-
-We recommend installing the system in the `/opt` directory, which is the standard location for optional software on Linux. You can jump directly to this directory from anywhere using an absolute path.
-
-```bash
-# 1. Move to the /opt directory (no matter where you are)
-cd /opt
-
-# 2. Grant your user permission to write in /opt (required for cloning)
-sudo chown $USER:$USER /opt
-
-# 3. Clone the repository
-git clone https://github.com/aoyama-eiya/oonanji-vault.git
-
-# 4. Enter the project folder
-cd /opt/oonanji-vault
-
-# Note: If the folder name became 'oonanji-vault-main' (from ZIP download):
-# mv /opt/oonanji-vault-main /opt/oonanji-vault && cd /opt/oonanji-vault
-```
-
-### 3. Download AI Models
-
-The system requires AI models to function. Download them into the `system/models` directory.
-
-```bash
-cd /opt/oonanji-vault/system/models
-
-# Download Embedding Model (Nomic Embed)
-curl -L -o nomic-embed-text-v1.5.f16.gguf https://huggingface.co/nomic-ai/nomic-embed-text-v1.5-GGUF/resolve/main/nomic-embed-text-v1.5.f16.gguf
-
-# Download LLM (Qwen 2.5 3B)
-curl -L -o qwen2.5-3b-instruct-q4_0.gguf https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q4_0.gguf
-```
-
-### 4. Startup (from /system directory)
-
-Go to the `system` directory and start the system with Docker:
-
-```bash
-cd /opt/oonanji-vault/system
-docker compose up -d
-```
-
-Valid startup output:
-- `Container oonanji-backend Created`
-- `Container oonanji-frontend Created`
-
-### 5. Configure Auto-Start (Optional)
-
-To ensure the system starts automatically when the PC boots:
-
-```bash
-docker update --restart unless-stopped oonanji-backend
-docker update --restart unless-stopped oonanji-frontend
-```
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+</div>
 
 ---
 
-## 🔐 Login
+## 📖 About
 
-- **URL**: http://localhost
-- **Default ID**: `adminuser`
-- **Default Password**: `admin`
+Oonanji Vault は、プライバシーと使いやすさを最優先に設計された、AI搭載のワークスペース・プラットフォームです。
+ドキュメント管理、ファイルストレージ、そしてAIアシスタントを、シンプルで美しいインターフェースに統合しました。
 
-*The system automatically creates this administrator account on the first launch if no database is found.*
+### ✨ Key Concepts
 
----
+- **Simplicity & Usability**
+  - 複雑な設定は不要です。専門知識がなくても、直感的に使い始めることができます。
 
-## 🛠 GPU Support (Optional)
+- **Privacy First**
+  - あなたのデータは完全にあなたのものです。ローカル環境で動作し、学習目的で外部に送信されることはありません。外部AIモデルと比較しても、セキュリティ面で最も安全な選択肢の一つです。
 
-By default, the system runs on **CPU/Integrated GPU**. If you have an **NVIDIA GPU**:
+- **Speed & Aesthetics**
+  - 軽快な動作と、触れることが楽しくなるような洗練されたデザインを追求しました。思考を妨げない、スムーズな体験を提供します。
 
-1. Open `system/Dockerfile.backend` and follow the comments to switch to the NVIDIA base image.
-2. Open `system/docker-compose.yml` and uncomment the `deploy` section.
-
----
-
-## Directory Structure
-
-```
-oonanji-vault/
-├── README.md
-├── INSTALL.md
-└── system/                 # Main System Files
-    ├── docker-compose.yml  # Run Docker from here
-    ├── backend.py          # FastAPI Backend
-    ├── models/             # AI Models
-    └── src/                # Next.js Frontend
-```
+- **Focus on What Matters**
+  - 過剰な機能は持たせず、本当に必要な機能だけを厳選。日々のタスクに集中できる環境を整えます。
 
 ---
 
-&copy; 2024-2026 Oonanji Vault Project. All rights reserved.
+## 🛠 Features
+
+- **AI Secretary**: 文書作成から情報検索まで、あなたの業務をサポートするAIアシスタント。
+- **Document Studio**: Markdownに対応した、クリーンで書きやすいドキュメントエディタ。
+- **Secure Storage**: 重要なファイルを安全に保管・管理できるNAS機能。
+- **Smart Indexing**: 保存した情報を自動で整理・インデックス化し、必要な時にすぐに呼び出せます。
+
+---
+
+## 🚀 Getting Started
+
+Oonanji Vault は、Docker を使用して簡単にセットアップできます。
+
+### Prerequisites
+
+- Docker
+- Docker Compose
+
+### Installation
+
+1. **リポジトリのクローン**
+   ```bash
+   git clone https://github.com/aoyama-eiya/oonanji-vault.git
+   cd oonanji-vault
+   ```
+
+2. **起動**
+   ```bash
+   chmod +x start.sh
+   ./start.sh
+   ```
+   初回起動時は必要なイメージのビルドやダウンロードが行われます。
+
+3. **アクセス**
+   ブラウザで `http://localhost:3000` にアクセスしてください。
+
+### Manual Setup (Development)
+
+開発者向けの手動セットアップ手順です。
+
+1. **Backend (Python/FastAPI)**
+   ```bash
+   cd system
+   python3 -m venv venv
+   source venv/bin/activate
+   pip install -r requirements.txt
+   python backend.py
+   ```
+
+2. **Frontend (Next.js)**
+   ```bash
+   cd system
+   npm install
+   npm run dev
+   ```
+
+---
+
+## 🤝 Contributing
+
+Oonanji Vault はオープンソースプロジェクトです。
+バグ報告、機能提案、プルリクエストなど、コミュニティからの貢献を歓迎します。
+
+1. Fork the Project
+2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the Branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+---
+
+<div align="center">
+  <p>Made with ❤️ by the Oonanji Vault Team</p>
+</div>

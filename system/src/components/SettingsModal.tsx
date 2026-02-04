@@ -415,15 +415,6 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                                 <span>{t('nas_storage')}</span>
                             </button>
                             <button
-                                onClick={() => setActiveTab('license')}
-                                className={`w-full text-left px-3 py-2 rounded-lg flex items-center gap-2 transition-colors mb-1
-                                    ${activeTab === 'license' ? 'bg-[var(--primary)] text-[var(--primary-foreground)]' : 'hover:bg-[var(--muted)] text-[var(--foreground)]'}
-                                `}
-                            >
-                                <Key size={16} />
-                                <span>アカウント連携</span>
-                            </button>
-                            <button
                                 onClick={() => setActiveTab('indexing')}
                                 className={`w-full text-left px-3 py-2 rounded-lg flex items-center gap-2 transition-colors mb-1
                                     ${activeTab === 'indexing' ? 'bg-[var(--primary)] text-[var(--primary-foreground)]' : 'hover:bg-[var(--muted)] text-[var(--foreground)]'}
@@ -705,110 +696,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                         </div>
                     )}
 
-                    {activeTab === 'license' && (
-                        <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
-                            <div className="bg-[var(--card)] p-6 rounded-xl border border-[var(--border)] relative overflow-hidden">
-                                <div className="absolute top-0 right-0 p-32 bg-blue-500/10 blur-[64px] rounded-full pointer-events-none" />
-                                <h3 className="text-lg font-bold mb-4 flex items-center gap-2 relative z-10">
-                                    アカウント連携・ライセンス
-                                </h3>
 
-                                <div className="flex items-center gap-4 mb-6 relative z-10">
-                                    <div>
-                                        <div className="text-sm text-[var(--muted-foreground)] mb-1">現在のエディション</div>
-                                        <div className={`font-bold text-lg ${(licenseInfo?.active && licenseInfo?.plan) ? 'text-green-400' : 'text-gray-400'}`}>
-                                            {licenseInfo?.plan ? licenseInfo.plan.toUpperCase() : '未認証 / Free'}
-                                        </div>
-                                        <div className="text-xs text-[var(--muted-foreground)] mt-1 opacity-70">
-                                            ステータス: {licenseInfo?.active ? '有効' : '未認証'}
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="pt-4 border-t border-[var(--border)] relative z-10">
-                                    <h4 className="text-sm font-bold mb-2">ライセンス認証</h4>
-                                    {!isUpdatingLicense ? (
-                                        <div className="flex items-center justify-between">
-                                            <p className="text-sm text-[var(--muted-foreground)]">
-                                                ポータルサイトのアカウントでログインしてください。
-                                            </p>
-                                            <button
-                                                onClick={() => {
-                                                    const PORTAL_URL = 'https://oonanji-vault.com';
-                                                    const APP_URL = window.location.origin;
-                                                    window.open(`${PORTAL_URL}/auth/authorize?redirect_uri=${APP_URL}/auth/callback`, '_blank');
-                                                }}
-                                                className="px-4 py-2 bg-[var(--background)] border border-[var(--border)] rounded-lg hover:bg-[var(--muted)] text-sm transition-colors whitespace-nowrap shrink-0"
-                                            >
-                                                ポータルを開く
-                                            </button>
-                                        </div>
-                                    ) : (
-                                        <div className="space-y-4 animate-in fade-in zoom-in duration-200">
-                                            {updatingLicenseStatus === 'idle' || updatingLicenseStatus === 'error' ? (
-                                                <div className="p-4 bg-[var(--muted)]/30 rounded-lg border border-[var(--border)]">
-                                                    <div className="space-y-3">
-                                                        <div>
-                                                            <label className="text-xs font-bold text-[var(--muted-foreground)] block mb-1">メールアドレス</label>
-                                                            <input
-                                                                type="email"
-                                                                className="w-full bg-[var(--background)] border border-[var(--border)] rounded-lg p-2 text-sm"
-                                                                placeholder="user@example.com"
-                                                                value={authEmail}
-                                                                onChange={(e) => setAuthEmail(e.target.value)}
-                                                            />
-                                                        </div>
-                                                        <div>
-                                                            <label className="text-xs font-bold text-[var(--muted-foreground)] block mb-1">パスワード</label>
-                                                            <input
-                                                                type="password"
-                                                                className="w-full bg-[var(--background)] border border-[var(--border)] rounded-lg p-2 text-sm"
-                                                                placeholder="••••••••"
-                                                                value={authPassword}
-                                                                onChange={(e) => setAuthPassword(e.target.value)}
-                                                            />
-                                                        </div>
-
-                                                        {licenseError && (
-                                                            <p className="text-red-400 text-xs flex items-center gap-1">
-                                                                <X className="w-3 h-3" /> {licenseError}
-                                                            </p>
-                                                        )}
-
-                                                        <button
-                                                            onClick={handleDirectLogin}
-                                                            disabled={!authEmail || !authPassword}
-                                                            className="w-full py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-blue-500/20"
-                                                        >
-                                                            ログインして連携
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            ) : (
-                                                <div className="text-center py-6 bg-green-500/10 rounded-lg border border-green-500/20">
-                                                    <Check className="w-8 h-8 mx-auto text-green-500 mb-2" />
-                                                    <p className="font-bold text-green-500">認証完了！</p>
-                                                    <p className="text-xs text-[var(--muted-foreground)]">アカウントが正常に連携されました。</p>
-                                                </div>
-                                            )}
-
-                                            <button
-                                                onClick={() => {
-                                                    setIsUpdatingLicense(false);
-                                                    setUpdatingLicenseStatus('idle');
-                                                    setAuthPassword('');
-                                                    setLicenseError('');
-                                                }}
-                                                className="w-full py-2 hover:bg-[var(--muted)] rounded-lg text-xs text-[var(--muted-foreground)]"
-                                            >
-                                                キャンセル
-                                            </button>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-                    )}
 
 
                     {activeTab === 'updates' && (
@@ -872,80 +760,42 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                                 <div className="border-t border-[var(--border)] pt-6 flex flex-col items-center gap-4">
                                     {/* Beta Toggle removed from here, moved to top */}
 
-                                    {/* License Gate - More permissive check */}
-                                    {(!licenseInfo?.active) ? (
-                                        <div className="flex flex-col items-center gap-3 p-4 bg-blue-500/10 rounded-xl border border-blue-500/20 w-full">
+                                    {/* OSS Update Flow - Always Allowed */}
+                                    {!updateStatus.checked && !updateStatus.updating && (
+                                        <button
+                                            onClick={handleCheckUpdate}
+                                            className="px-6 py-2.5 bg-[var(--foreground)] text-[var(--background)] rounded-full flex items-center gap-2 shadow-sm hover:opacity-90 transition-all text-sm font-medium"
+                                        >
+                                            <RefreshCw className="w-4 h-4" />
+                                            アップデートを確認
+                                        </button>
+                                    )}
+
+                                    {updateStatus.checked && !updateStatus.updating && !updateStatus.completed && (
+                                        <div className="flex flex-col items-center gap-4 animate-in fade-in slide-in-from-bottom-2 w-full">
                                             <div className="text-center">
-                                                <div className="text-sm font-bold text-blue-500 mb-0.5">認証が必要です</div>
-                                                <p className="text-xs text-[var(--muted-foreground)]">更新を行うにはライセンス認証が必要です。</p>
+                                                <div className="text-sm font-bold text-green-500 mb-0.5">新しいバージョンが利用可能です</div>
+                                                <p className="text-xs text-[var(--muted-foreground)]">
+                                                    {updateStatus.channel === 'beta' ? 'Updating to latest Main branch' : 'Current -> v1.0.0'}
+                                                </p>
                                             </div>
                                             <button
-                                                onClick={() => {
-                                                    const PORTAL_URL = 'https://oonanji-vault.com';
-                                                    const APP_URL = window.location.origin;
-                                                    window.open(`${PORTAL_URL}/auth/authorize?redirect_uri=${APP_URL}/auth/callback`, '_blank');
-                                                }}
-                                                className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-full flex items-center gap-2 shadow-sm transition-all text-sm"
+                                                onClick={handlePerformUpdate}
+                                                className="bg-green-600 hover:bg-green-700 text-white px-6 py-2.5 rounded-full flex items-center gap-2 shadow-md transition-all text-sm font-medium"
                                             >
-                                                <Github className="w-4 h-4" />
-                                                ポータルでログイン
+                                                <Download className="w-4 h-4" />
+                                                アップデートを実行
                                             </button>
                                         </div>
-                                    ) : (!licenseInfo?.allow_update && !['starter', 'enterprise', 'corporate_subscribed', 'free', 'personal'].includes(licenseInfo?.plan?.toLowerCase())) ? (
-                                        <div className="flex flex-col items-center gap-3 p-4 bg-yellow-500/10 rounded-xl border border-yellow-500/20 w-full">
-                                            <div className="text-center">
-                                                <div className="text-sm font-bold text-yellow-500 mb-0.5">権限がありません</div>
-                                                <p className="text-xs text-[var(--muted-foreground)]">プラン({licenseInfo.plan})を確認してください。</p>
-                                            </div>
-                                            <button
-                                                onClick={() => {
-                                                    fetch(`${API_URL}/api/license/refresh`, { method: 'POST' }).then(() => fetchLicenseInfo());
-                                                }}
-                                                className="px-4 py-1.5 rounded-full border border-[var(--border)] hover:bg-[var(--muted)] transition-colors text-xs"
-                                            >
-                                                <RefreshCw className="w-3 h-3 inline mr-1" />
-                                                再確認
-                                            </button>
+                                    )}
+
+                                    {(updateStatus.updating || updateStatus.completed) && (
+                                        <div className="w-full bg-[#0d1117] rounded-xl border border-gray-800 p-3 font-mono text-[10px] text-gray-300 h-48 overflow-y-auto">
+                                            {updateLogs.map((log, i) => (
+                                                <div key={i} className="mb-0.5">{log}</div>
+                                            ))}
+                                            {updateStatus.updating && <div className="animate-pulse text-blue-500">_</div>}
                                         </div>
-                                    ) : (
-                                        <>
-                                            {!updateStatus.checked && !updateStatus.updating && (
-                                                <button
-                                                    onClick={handleCheckUpdate}
-                                                    className="px-6 py-2.5 bg-[var(--foreground)] text-[var(--background)] rounded-full flex items-center gap-2 shadow-sm hover:opacity-90 transition-all text-sm font-medium"
-                                                >
-                                                    <RefreshCw className="w-4 h-4" />
-                                                    アップデートを確認
-                                                </button>
-                                            )}
-
-                                            {updateStatus.checked && !updateStatus.updating && !updateStatus.completed && (
-                                                <div className="flex flex-col items-center gap-4 animate-in fade-in slide-in-from-bottom-2 w-full">
-                                                    <div className="text-center">
-                                                        <div className="text-sm font-bold text-green-500 mb-0.5">新しいバージョンが利用可能です</div>
-                                                        <p className="text-xs text-[var(--muted-foreground)]">
-                                                            {updateStatus.channel === 'beta' ? 'Updating to latest Main branch' : 'Current -> v1.0.0'}
-                                                        </p>
-                                                    </div>
-                                                    <button
-                                                        onClick={handlePerformUpdate}
-                                                        className="bg-green-600 hover:bg-green-700 text-white px-6 py-2.5 rounded-full flex items-center gap-2 shadow-md transition-all text-sm font-medium"
-                                                    >
-                                                        <Download className="w-4 h-4" />
-                                                        アップデートを実行
-                                                    </button>
-                                                </div>
-                                            )}
-
-                                            {(updateStatus.updating || updateStatus.completed) && (
-                                                <div className="w-full bg-[#0d1117] rounded-xl border border-gray-800 p-3 font-mono text-[10px] text-gray-300 h-48 overflow-y-auto">
-                                                    {updateLogs.map((log, i) => (
-                                                        <div key={i} className="mb-0.5">{log}</div>
-                                                    ))}
-                                                    {updateStatus.updating && <div className="animate-pulse text-blue-500">_</div>}
-                                                </div>
-                                            )}
-                                        </>
                                     )}
                                 </div>
                             </div>

@@ -1415,13 +1415,28 @@ async def delete_user(user_id: int, admin: dict = Depends(get_current_admin)):
     # Check if user is adminuser
     cursor.execute('SELECT username FROM users WHERE id = ?', (user_id,))
     row = cursor.fetchone()
-    if row and row[0] == 'adminuser':
+    if not row:
+        conn.close()
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    username = row[0]
+    if username == 'adminuser':
         conn.close()
         raise HTTPException(status_code=400, detail="Cannot delete the default admin user")
         
     cursor.execute('DELETE FROM users WHERE id = ?', (user_id,))
     conn.commit()
     conn.close()
+    
+    # Clean up user's model directory
+    user_model_dir = BASE_DIR / f"models_{username}"
+    if user_model_dir.exists() and user_model_dir != MODELS_DIR:
+        try:
+            shutil.rmtree(user_model_dir)
+            logger.info(f"Deleted model directory for {username}: {user_model_dir}")
+        except Exception as e:
+            logger.error(f"Failed to delete model directory for {username}: {e}")
+            
     return {"status": "success"}
 
 @app.get("/api/admin/nas/status")

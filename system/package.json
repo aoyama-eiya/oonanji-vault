@@ -1,8 +1,8 @@
 {
   "name": "oonanji-vault",
-  "version": "1.0.3",
+  "version": "2.0.0",
   "description": "Oonanji Vault",
-  "license": "BUSL-1.1",
+  "license": "MIT",
   "private": false,
   "scripts": {
     "dev": "next dev -H 0.0.0.0 --webpack",
