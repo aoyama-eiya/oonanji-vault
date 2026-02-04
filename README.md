@@ -43,52 +43,103 @@ Oonanji Vault は、プライバシーと使いやすさを最優先に設計さ
 
 ---
 
-## 🚀 Getting Started
+## 🚀 Installation Guide
 
-Oonanji Vault は、Docker を使用して簡単にセットアップできます。
+推奨環境: **Ubuntu Server / Desktop (22.04 LTS or later)**
+インストール先: `/opt/oonanji-vault`
 
-### Prerequisites
+### 1. Prerequisites (事前準備)
 
-- Docker
-- Docker Compose
+Docker と Docker Compose がインストールされていない場合は、以下のコマンドでインストールしてください。
 
-### Installation
+```bash
+# Dockerのインストール
+curl -fsSL https://get.docker.com -o get-docker.sh
+sudo sh get-docker.sh
 
-1. **リポジトリのクローン**
-   ```bash
-   git clone https://github.com/aoyama-eiya/oonanji-vault.git
-   cd oonanji-vault
-   ```
+# 現在のユーザーをdockerグループに追加 (要再ログイン)
+sudo usermod -aG docker $USER
 
-2. **起動**
-   ```bash
-   chmod +x start.sh
-   ./start.sh
-   ```
-   初回起動時は必要なイメージのビルドやダウンロードが行われます。
+# Dockerの起動確認
+sudo systemctl start docker
+sudo systemctl enable docker
+```
 
-3. **アクセス**
-   ブラウザで `http://localhost:3000` にアクセスしてください。
+### 2. Download Project (ダウンロード)
 
-### Manual Setup (Development)
+プロジェクトを `/opt` ディレクトリ配下に展開します。
 
-開発者向けの手動セットアップ手順です。
+```bash
+# /opt ディレクトリへ移動
+cd /opt
 
-1. **Backend (Python/FastAPI)**
-   ```bash
-   cd system
-   python3 -m venv venv
-   source venv/bin/activate
-   pip install -r requirements.txt
-   python backend.py
-   ```
+# リポジトリのクローン (sudoが必要な場合があります)
+sudo git clone https://github.com/aoyama-eiya/oonanji-vault.git
 
-2. **Frontend (Next.js)**
-   ```bash
-   cd system
-   npm install
-   npm run dev
-   ```
+# 権限の調整 (現在のユーザーで使用できるように変更)
+sudo chown -R $USER:$USER oonanji-vault
+
+# ディレクトリへの移動
+cd oonanji-vault/system
+```
+
+### 3. Setup AI Models (モデルの配置)
+
+AI機能を動作させるために必要な学習済モデル（GGUF形式）をダウンロードし、配置します。
+
+```bash
+# modelsディレクトリの作成
+mkdir -p models
+cd models
+
+# 1. LLM Model (Qwen2.5-3B-Instruct) のダウンロード
+wget https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q4_0.gguf
+
+# 2. Embedding Model (Nomic Embed Text) のダウンロード
+wget https://huggingface.co/nomic-ai/nomic-embed-text-v1.5-GGUF/resolve/main/nomic-embed-text-v1.5.f16.gguf
+
+# 元のディレクトリに戻る
+cd ..
+```
+
+### 4. Start System (起動)
+
+準備が完了したら、システムを起動します。
+
+```bash
+# 実行権限の付与
+chmod +x start.sh
+
+# システムの起動
+./start.sh
+```
+
+初回起動時はコンテナのビルドが行われるため、数分〜数十分かかる場合があります。
+完了後、ブラウザで以下のURLにアクセスしてください。
+
+**http://localhost:3000**
+
+---
+
+## 💻 Manual Setup (Development)
+
+開発者向けの手動セットアップ（Dockerを使用しない場合）です。
+
+**Backend (Python/FastAPI)**
+```bash
+cd system
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+python backend.py
+```
+
+**Frontend (Next.js)**
+```bash
+cd system
+npm install
+npm run dev
+```
 
 ---
 
@@ -105,7 +156,15 @@ Oonanji Vault はオープンソースプロジェクトです。
 
 ---
 
-## 📄 License
+## � Contact
+
+ご質問、お問い合わせは以下のメールアドレスまでお願いいたします。
+
+**Email**: aoyama@oonanji.com
+
+---
+
+## �📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
